@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="zh-CN,zh-TW,en,default">
+  <head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, minimum-scale=1.0"
+  />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <meta name="theme-color" content="#fff" id="theme-color" />
+  <meta
+    name="description"
+    content="胖子叔叔的博客屋"
+  />
+  <link rel="icon" href="/img/avantar.jpg" />
+  <title>VLLM 学习之路(一) - 模型服务</title>
+   
+  <meta
+    property="og:title"
+    content="VLLM 学习之路(一) - 模型服务"
+  />
+   
+  <meta property="og:url" content="https://loveychen.github.io/2025/06/12/Learning-VLLM-serve-model/index.html" />
+   
+  <meta
+    property="og:img"
+    content="/img/avantar.jpg"
+  />
+    
+  <meta property="og:type" content="article" />
+  <meta property="og:article:published_time" content="2025-06-12" />
+  <meta
+    property="og:article:modified_time"
+    content="2025-08-06"
+  />
+  <meta
+    property="og:article:author"
+    content="深钓大虾"
+  />
+   
+  <meta property="og:article:tag" content="VLLM" />
+  
+  <meta property="og:article:tag" content="LLM Inference" />
+       <link rel="preload" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css" as="style" > <link rel="preload" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css" as="style" > <link rel="preload" href="/css/main.css" as="style" > 
+  <link rel="modulepreload" href="//instant.page/5.1.0" />
+   <link rel="stylesheet" href="/css/main.css">  <link rel="stylesheet" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css"> 
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css">    <link rel="stylesheet" href="/js/lib/lightbox/baguetteBox.min.css"> 
+
+  <script>
+    // 主题配置
+    const themeConfig = {
+      dark: {
+        colorScheme: "dark",
+        themeColor: "#1c1c1e",
+      },
+      light: {
+        colorScheme: "light",
+        themeColor: "#ffffff",
+      },
+    };
+
+    // 获取当前颜色方案
+    function getCurrentColorScheme() {
+      const userSetting = localStorage.getItem("user-color-scheme");
+      if (userSetting) {
+        return themeConfig[userSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      const pageSetting = document.documentElement.getAttribute(
+        "data-user-color-scheme"
+      );
+      if (pageSetting) {
+        return themeConfig[pageSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      return getSystemColorScheme();
+    }
+
+    // 获取系统颜色方案
+    function getSystemColorScheme() {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+
+    // 设置主题
+    function setTheme(mode) {
+      const theme = mode || getCurrentColorScheme();
+      document.documentElement.setAttribute(
+        "data-user-color-scheme",
+        themeConfig[theme].colorScheme
+      );
+      document.getElementById("theme-color").content =
+        themeConfig[theme].themeColor;
+      document.getElementById("theme-color").dataset.mode = theme;
+
+      // 更新 Mermaid 图表
+      if (typeof mermaid !== "undefined") {
+        const mermaidTheme = theme === "dark" ? "dark" : "default";
+        if (mermaid.getTheme() !== mermaidTheme) {
+          mermaid.initialize(
+            Object.assign({}, mermaidConfig, { theme: mermaidTheme })
+          );
+          mermaid.contentLoaded();
+        }
+      }
+
+      // 更新 Prism 主题
+      if (typeof prismThemeChange === "function") {
+        prismThemeChange();
+      }
+    }
+
+    // 初始化主题
+    setTheme();
+
+    // 监听系统主题变化
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => {
+        setTheme(getSystemColorScheme());
+      });
+
+    // 监听页面主题类变化
+    const observer = new MutationObserver(() => {
+      setTheme();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-user-color-scheme", "class"],
+    });
+  </script>
+
+  <script>
+    function loadScript(url, cb) {
+      var script = document.createElement("script");
+      script.src = url;
+      if (cb) script.onload = cb;
+      script.async = true;
+      document.body.appendChild(script);
+    }
+    function loadCSS(href, data, attr) {
+      var sheet = document.createElement("link");
+      sheet.rel = "stylesheet";
+      sheet.href = href;
+      sheet.dataset[data] = attr;
+      document.head.appendChild(sheet);
+    }
+    function changeCSS(cssFile, data, attr) {
+      var oldlink = document.querySelector("[data-prism]");
+      var newlink = document.createElement("link");
+      newlink.setAttribute("rel", "stylesheet");
+      newlink.setAttribute("href", cssFile);
+      newlink.dataset.prism = attr;
+      document.head.replaceChild(newlink, oldlink);
+    }
+  </script>
+    
+  <script>
+    // control reverse button
+    var reverseDarkList = {
+      dark: "light",
+      light: "dark",
+    };
+    var themeColor = {
+      dark: "#1c1c1e",
+      light: "#fff",
+    };
+    // get the data of css prefers-color-scheme
+    var getCssMediaQuery = function () {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+    // reverse current darkmode setting function
+    var reverseDarkModeSetting = function () {
+      var setting = localStorage.getItem("user-color-scheme");
+      if (reverseDarkList[setting]) {
+        setting = reverseDarkList[setting];
+      } else if (setting === null) {
+        setting = reverseDarkList[getCssMediaQuery()];
+      } else {
+        return;
+      }
+      localStorage.setItem("user-color-scheme", setting);
+      return setting;
+    };
+    // apply current darkmode setting
+  </script>
+  
+  <script>
+    var setDarkmode = function (mode) {
+      var setting = mode || localStorage.getItem("user-color-scheme");
+      if (setting === getCssMediaQuery()) {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else if (reverseDarkList[setting]) {
+        document.documentElement.setAttribute(
+          "data-user-color-scheme",
+          setting
+        );
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content =
+          themeColor[getCssMediaQuery()];
+        document.getElementById("theme-color").dataset.mode =
+          getCssMediaQuery();
+      }
+    };
+    setDarkmode();
+  </script>
+
+  <!-- 推荐使用 CDN，指定具体版本避免兼容性问题 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+
+  <!-- 初始化 Mermaid（若插件未自动初始化） -->
+  <script>
+    // 确保脚本加载完成后初始化
+    window.onload = function () {
+      if (window.mermaid) {
+        mermaid.initialize({
+          theme: "base",
+          startOnLoad: true, // 自动渲染页面中的图表
+          securityLevel: "loose", // 允许更多语法（可选）
+        });
+      }
+    };
+  </script>
+
+     <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.js" as="script"> <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.css" as="style" >   <link rel="preload" href="/js/lib/lozad.min.js" as="script">    
+   <link rel="prefetch" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css" as="script">
+     <link rel="prefetch" href="//unpkg.com/valine@1.4.15/dist/Valine.min.js" as="script">  
+<!-- hexo injector head_end start --><style>
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
+}
+    </style><!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/atom.xml" title="胖子叔叔的博客屋" type="application/atom+xml">
+</head>
+
+  <body>
+    <div class="wrapper">
+       
+      <nav class="navbar">
+
+  <div class="navbar-logo">
+    <a class="navbar-logo-main" href="/">
+      
+        <img 
+          class="navbar-logo-img"
+          width="32"
+          height="32"
+          src="/img/avantar.jpg" 
+          alt="blog logo">
+      
+      <span class="navbar-logo-dsc">胖子叔叔的博客屋</span>
+      </a>
+  </div>
+
+  <div class="navbar-menu">
+    
+      <a 
+        href="/" 
+        class="navbar-menu-item">
+        
+          首页
+        
+      </a>
+    
+      <a 
+        href="/archives" 
+        class="navbar-menu-item">
+        
+          归档
+        
+      </a>
+    
+      <a 
+        href="/tags" 
+        class="navbar-menu-item">
+        
+          标签
+        
+      </a>
+    
+      <a 
+        href="/categories" 
+        class="navbar-menu-item">
+        
+          分类
+        
+      </a>
+    
+      <a 
+        href="/about" 
+        class="navbar-menu-item">
+        
+          关于我
+        
+      </a>
+    
+      <a 
+        href="/shuoshuo" 
+        class="navbar-menu-item">
+        
+          留言板
+        
+      </a>
+    
+    <button 
+      class="navbar-menu-item darknavbar navbar-menu-btn" 
+      aria-label="Toggle dark mode"
+      id="dark">
+      <i class="iconfont icon-weather"></i>
+    </button>
+    <button 
+      class="navbar-menu-item searchnavbar navbar-menu-btn" 
+      aria-label="Toggle search"
+      id="search">
+      <!-- <i 
+        class="iconfont icon-search" 
+        style="font-size: 1.2rem; font-weight: 400;">
+      </i> -->
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img"
+        class="iconify iconify--ion" width="28" height="28" preserveAspectRatio="xMidYMid meet" viewBox="0 0 512 512">
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M256 80a176 176 0 1 0 176 176A176 176 0 0 0 256 80Z"></path>
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M232 160a72 72 0 1 0 72 72a72 72 0 0 0-72-72Z"></path>
+        <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="28"
+          d="M283.64 283.64L336 336"></path>
+      </svg>
+    </button>
+  </div>
+</nav>
+ 
+      
+      <div 
+        id="local-search" 
+        style="display: none">
+        <input
+          class="navbar-menu-item"
+          id="search-input"
+          placeholder="请输入搜索内容..." />
+        <div id="search-content"></div>
+      </div>
+      
+      <div class="section-wrap">
+        <div class="container">
+          <div class="columns">
+            <!-- Left sidebar toggle button -->
+            <button class="sidebar-toggle left-toggle" id="left-sidebar-toggle">
+              <span>点击查看分类和标签</span>
+            </button>
+            
+            <!-- Left sidebar -->
+            <aside class="left-column" id="left-sidebar">
+              
+              <div class="card card-author">
+                
+  <img 
+    src="/img/avantar.jpg" 
+    class="author-img"
+    width="88"
+    height="88"
+    alt="author avatar">
+
+<p class="author-name">深钓大虾</p>
+<p class="author-description">NLP 算法专家</p>
+<div class="author-message">
+  <a 
+    class="author-posts-count" 
+    href="/archives">
+    <span>8</span>
+    <span>文章</span>
+  </a>
+  <a 
+    class="author-categories-count" 
+    href="/categories">
+    <span>6</span>
+    <span>分类</span>
+  </a>
+  <a 
+    class="author-tags-count" 
+    href="/tags">
+    <span>20</span>
+    <span>标签</span>
+  </a>
+</div>
+
+  <div class="author-card-society">
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://github.com/loveychen">
+          <i class="iconfont icon-github society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a href="mailto:loveycd1989@.gmail.com">
+          <i class="iconfont icon-mail society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://www.linkedin.com/in/%E9%9B%95-%E9%99%88-11a958146/">
+          <i class="iconfont icon-linkedin society-icon"></i>
+        </a>
+      </div>
+    
+  </div>
+
+              </div>
+               <div class="sticky-tablet">
+  
+  
+    <article class="display-when-two-columns spacer">
+      <div class="card card-content toc-card">
+        <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">VLLM 模型服务</span></a></li></ol>
+      </div>
+    </article>
+  
+  
+  <article class="card card-content categories-widget">
+    <div class="categories-card">
+  <div class="categories-header">
+    <i 
+      class="iconfont icon-fenlei" 
+      style="padding-right: 2px;">
+    </i>分类
+  </div>
+  <div class="categories-list">
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/">
+        <div class="categories-list-item">
+          对话系统
+          <span class="categories-list-item-badge">4</span>
+        </div>
+      </a>
+    
+      <a href="/categories/LLM-Agent/">
+        <div class="categories-list-item">
+          LLM-Agent
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/">
+        <div class="categories-list-item">
+          Mathematics
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84/">
+        <div class="categories-list-item">
+          系统架构
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/ConvLab2/">
+        <div class="categories-list-item">
+          对话系统/ConvLab2
+          <span class="categories-list-item-badge">3</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/Probability/">
+        <div class="categories-list-item">
+          Mathematics/Probability
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  <article class="card card-content tags-widget">
+    <div class="tags-card">
+  <div class="tags-header">
+    <i 
+      class="iconfont icon-biaoqian" 
+      style="padding-right: 2px;">
+    </i>热门标签
+  </div>
+  <div class="tags-list">
+    
+      <a 
+        href="/tags/ConvLab2/" 
+        title="ConvLab2">
+        <div class="tags-list-item">ConvLab2</div>
+      </a>
+    
+      <a 
+        href="/tags/TOD/" 
+        title="TOD">
+        <div class="tags-list-item">TOD</div>
+      </a>
+    
+      <a 
+        href="/tags/User-Simulator/" 
+        title="User Simulator">
+        <div class="tags-list-item">User Simulator</div>
+      </a>
+    
+      <a 
+        href="/tags/HUS/" 
+        title="HUS">
+        <div class="tags-list-item">HUS</div>
+      </a>
+    
+      <a 
+        href="/tags/Agenda/" 
+        title="Agenda">
+        <div class="tags-list-item">Agenda</div>
+      </a>
+    
+      <a 
+        href="/tags/TRADE/" 
+        title="TRADE">
+        <div class="tags-list-item">TRADE</div>
+      </a>
+    
+      <a 
+        href="/tags/DST/" 
+        title="DST">
+        <div class="tags-list-item">DST</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/" 
+        title="源码解析">
+        <div class="tags-list-item">源码解析</div>
+      </a>
+    
+      <a 
+        href="/tags/gRPC/" 
+        title="gRPC">
+        <div class="tags-list-item">gRPC</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%A6%82%E7%8E%87%E8%AE%BA/" 
+        title="概率论">
+        <div class="tags-list-item">概率论</div>
+      </a>
+    
+      <a 
+        href="/tags/logit/" 
+        title="logit">
+        <div class="tags-list-item">logit</div>
+      </a>
+    
+      <a 
+        href="/tags/Mathematics/" 
+        title="Mathematics">
+        <div class="tags-list-item">Mathematics</div>
+      </a>
+    
+      <a 
+        href="/tags/Probability/" 
+        title="Probability">
+        <div class="tags-list-item">Probability</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Inference/" 
+        title="LLM Inference">
+        <div class="tags-list-item">LLM Inference</div>
+      </a>
+    
+      <a 
+        href="/tags/VLLM/" 
+        title="VLLM">
+        <div class="tags-list-item">VLLM</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Memory/" 
+        title="LLM Memory">
+        <div class="tags-list-item">LLM Memory</div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <main class="main-column">
+              
+
+
+<article class="card card-content">
+  <header>
+    <h1 class="post-title">
+      VLLM 学习之路(一) - 模型服务
+    </h1>
+  </header>
+  
+  
+  <div class="post-meta post-show-meta">
+    <time datetime="2025-06-12T06:21:19.000Z">
+      <i 
+        class="iconfont icon-calendar" 
+        style="margin-right: 2px;">
+      </i>
+      <span>2025-06-12</span>
+    </time>
+    
+    
+      <span class="dot"></span>
+      <span>687 字</span>
+    
+  </div>
+
+
+  
+    <div 
+      class="post-meta post-show-meta" 
+      style="margin-top: -10px;">
+      <div style="display: flex; align-items: center;">
+        <i 
+          class="iconfont icon-biaoqian" 
+          style="margin-right: 2px; font-size: 1.15rem;">
+        </i>
+        
+          
+          <a 
+            href="/tags/VLLM/" 
+            class="post-meta-link">
+            VLLM
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/LLM-Inference/" 
+            class="post-meta-link">
+            LLM Inference
+          </a>
+        
+      </div>
+    </div>
+  
+  </header>
+  <div 
+    id="section" 
+    class="post-content">
+    <p><a target="_blank" rel="noopener" href="https://github.com/vllm-project/vllm">VLLM</a> 是当前非常流行的一个 LLM 服务和推理框架，我们将开启一个系列，详细学习 VLLM 框架。<br>
+这是该系列的第一篇文章，我们先介绍 VLLM 是如何启动一个模型，并提供 HTTP 接口服务的。</p>
+<h1>VLLM 模型服务</h1>
+<p>根据 <a target="_blank" rel="noopener" href="https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server">VLLM 官方文档</a> 介绍，我们可以使用如下命令启动一个兼容 OpenAI 接口的 HTTP 模型服务：</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">vllm</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> serve</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> Qwen/Qwen2.5-0.5B-Instruct</span></span></code></pre>
+<p>我们可以这样来理解这条命令：</p>
+<ul>
+<li>首先，我们使用了 vllm 这个命令，这是我们在安装 vllm 包的时候，由 vllm 的安装脚本添加到我们 Python 虚拟环境中的命令。这一般在安装包的 <a target="_blank" rel="noopener" href="http://setup.py">setup.py</a> 或 pyproject.toml 文件中指定。</li>
+</ul>
+<p>VLLM 是在 pyproject.toml 中指定的，如下：</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[project.scripts]</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">vllm = </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"vllm.entrypoints.cli.main:main"</span></span></code></pre>
+<ul>
+<li>serve 是一个子命令，用于启动一个模型服务。 vllm 提供了多个不同功能的子命令，如 serve、chat、complete、bench 等。这可以通过 <code>vllm --help</code> 命令查看，也可以通过阅读分析 <code>vllm.entrypoints.cli.main</code> 代码找到。</li>
+</ul>
+<details>
+<summary>`vllm --help` 输出的帮助信息如下：</summary>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">usage:</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> vllm</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> [-h] [-v] &#123;</span><span style="color:#8DA101;--shiki-dark:#A7C080">chat,complete,serve,bench&#125;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> ...</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">vLLM</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> CLI</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">positional</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> arguments:</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#123;chat,complete,serve,bench&#125;</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">chat</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> Generate</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> chat</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> completions</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> via</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> the</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> running</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> API</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> server</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">complete</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> Generate</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> text</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> completions</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> based</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> on</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> the</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> given</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> prompt</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> via</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> the</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> running</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> API</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> server</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">serve</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> Start</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> the</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> vLLM</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> OpenAI</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> Compatible</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> API</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> server</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">bench</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> vLLM</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> bench</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> subcommand.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">options:</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">-h,</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> --help</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> show</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> this</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> help</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> message</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> and</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> exit</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">-v,</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> --version</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> show</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> program</span><span style="color:#8DA101;--shiki-dark:#A7C080">'s version number and exit</span></span>
+<span class="line"></span></code></pre>
+</details>
+<ul>
+<li><code>Qwen/Qwen2.5-0.5B-Instruct</code> 是本次服务的模型，这是一个 0.5B 的小尺寸模型，大家的普通电脑设备都可以跑这个模型。这里给的是一个模型名称（而不是模型路径），因此它会去 huggingface 上下载这个模型，这个过程比较耗时。如果已经下载过模型，则可以直接使用模型的完整路径启动服务。</li>
+</ul>
+<p>当我们看到类似如下的信息后，表明模型服务启动完成，我们可以访问 <code>localhost:8000/docs</code> 端口查看模型提供的接口及其相关文档。</p>
+<details>
+<summary>模型服务启动成功日志如下：</summary>
+<p><img src="vllm-serve.png" alt="vllm-serve-startup-logs" srcset="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20300%20300'%3E%3C/svg%3E" data-src="vllm-serve.png" class="lozad post-image"></p>
+</details>
+<p>我们在启动模型时没有特殊设置模型名称，因此 chat 等模型服务接口的 model 参数与模型名称保持一致即可（上述示例中为 <code>Qwen/Qwen2.5-0.5B-Instruct</code>）；我们也可以调用 models 接口查看当前提供服务的模型信息，如下：~</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">curl</span><span style="color:#DFA000;--shiki-dark:#DBBC7F"> http://localhost:8000/v1/models</span></span></code></pre>
+<details>
+<summary>`curl http://localhost:8000/v1/models` 输出结果如下：</summary>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#123;</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">  "</span><span style="color:#F57D26;--shiki-dark:#E69875">object</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">list</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">  "</span><span style="color:#F57D26;--shiki-dark:#E69875">data</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> [</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    &#123;</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">id</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">Qwen/Qwen2.5-0.5B-Instruct</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">object</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">model</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">created</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> 1749717234</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">owned_by</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">vllm</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">root</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">Qwen/Qwen2.5-0.5B-Instruct</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">parent</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> null</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">max_model_len</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> 32768</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">      "</span><span style="color:#F57D26;--shiki-dark:#E69875">permission</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> [</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        &#123;</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">id</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">modelperm-b2c923266dea46239192c5ab91652978</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">object</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">model_permission</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">created</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> 1749717234</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">allow_create_engine</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> false</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">allow_sampling</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> true</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">allow_logprobs</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> true</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">allow_search_indices</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> false</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">allow_view</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> true</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">allow_fine_tuning</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> false</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">organization</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#939F91;--shiki-dark:#859289"> "</span><span style="color:#8DA101;--shiki-dark:#A7C080">*</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">group</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> null</span><span style="color:#939F91;--shiki-dark:#859289">,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-dark:#859289">          "</span><span style="color:#F57D26;--shiki-dark:#E69875">is_blocking</span><span style="color:#939F91;--shiki-dark:#859289">"</span><span style="color:#939F91;--shiki-dark:#859289">:</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> false</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        &#125;</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      ]</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    &#125;</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  ]</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;</span></span></code></pre>
+</details>
+
+  </div>
+
+  
+  <div>
+    
+      <div 
+        class="post-note note-warning copyright" 
+        style="margin-top: 42px">
+        <p>
+          <span style="font-weight: bold;">作者：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="/about">
+            深钓大虾
+          </a>
+        </p>
+        <p>
+          <span style="font-weight: bold;">文章链接：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="https://loveychen.github.io/2025/06/12/Learning-VLLM-serve-model/">
+            https://loveychen.github.io/2025/06/12/Learning-VLLM-serve-model/
+          </a>
+        </p>
+        <p><span style="font-weight: bold;">版权声明：</span>本博客所有文章除特别声明外，均采用<a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh">CC BY-NC-SA 4.0 协议</a>。转载请注明出处！</p>
+      </div>
+    
+  </div>
+</article>
+<div class="nav">
+  
+    <div class="nav-item-prev">
+      <a 
+        href="/2025/08/05/LangChain-Memory-Comparison/" 
+        class="nav-link">
+        <i class="iconfont icon-left nav-prev-icon"></i>
+        <div>
+          <div class="nav-label">上一篇</div>
+          
+            <div class="nav-title">LangChain Memory 类型详细对比分析 </div>
+          
+        </div>
+      </a>
+    </div>
+  
+  
+    <div class="nav-item-next">
+      <a 
+        href="/2022/11/24/brief-intro-to-logit/" 
+        class="nav-link">
+        <div>
+          <div class="nav-label">下一篇</div>
+          
+            <div class="nav-title">从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚 </div>
+          
+        </div>
+        <i class="iconfont icon-right nav-next-icon"></i>
+      </a>
+    </div>
+  
+</div>
+
+  <div 
+    class="card card-content comment-card" 
+    style="margin-top: 16px;">
+    <div class="comment-card-title">评论</div>
+    
+  <div id="vcomments"></div>
+  
+  <script>
+    loadScript("//unpkg.com/valine@1.4.15/dist/Valine.min.js");
+    var oldLoadVa = window.onload;
+    window.onload = function () {
+      oldLoadVa && oldLoadVa();
+      new Valine({
+        el: '#vcomments',
+        appId: 'LC7p0faybQsaBhYb4lg1yjQd-MdYXbMMI',
+        appKey: 'uu6JdEPv1lLNFqIMvsG0EKOs',
+        placeholder: '请多指教',
+        path: window.location.pathname,
+        avatar: 'mp',
+        meta: ["nick","mail"],
+        pageSize: '10',
+        lang: '',
+        visitor: 'false',
+        highlight: true,
+        recordIP: false,
+        
+        
+        
+        enableQQ: 'false',
+        requiredFields: [],
+      });
+    };
+  </script>
+
+  </div>
+
+<div 
+  class="card card-content toc-card" 
+  id="mobiletoc">
+  <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">VLLM 模型服务</span></a></li></ol>
+</div>
+
+            </main>
+            
+            <!-- Right sidebar -->
+            <aside class="right-column" id="right-sidebar">
+              <div class="sticky-widescreen">
+  
+  
+    <article class="card card-content toc-card">
+      <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">VLLM 模型服务</span></a></li></ol>
+    </article>
+  
+  
+  <article class="card card-content">
+    <div class="recent-posts-card">
+  <div class="recent-posts-header">
+    <i 
+      class="iconfont icon-wenzhang_huaban" 
+      style="padding-right: 2px;">
+    </i>最近文章
+  </div>
+  <div class="recent-posts-list">
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-08-05</div>
+        <a href="/2025/08/05/LangChain-Memory-Comparison/"><div class="recent-posts-item-content">LangChain Memory 类型详细对比分析</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-06-12</div>
+        <a href="/2025/06/12/Learning-VLLM-serve-model/"><div class="recent-posts-item-content">VLLM 学习之路(一) - 模型服务</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2022-11-24</div>
+        <a href="/2022/11/24/brief-intro-to-logit/"><div class="recent-posts-item-content">从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2021-06-11</div>
+        <a href="/2021/06/11/20210611-memory-network-for-ds/"><div class="recent-posts-item-content">Memory Network 在对话系统中的应用</div></a>
+      </div>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <!-- Right sidebar toggle button -->
+            <button class="sidebar-toggle right-toggle" id="right-sidebar-toggle">
+              <span>点击查看目录</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+     
+    <footer class="footer">
+  <div class="footer-container">
+    <div>
+      <div class="footer-dsc">
+        <span>
+          Copyright ©
+          
+            2020
+          
+          
+                - 
+                2025
+          
+        </span>
+        &nbsp;
+        <a 
+          href="/" 
+          class="footer-link">
+          
+        </a>
+      </div>
+    </div>
+
+    
+      <div class="footer-dsc">
+        
+          Powered by
+          <a 
+            href="https://hexo.io/" 
+            class="footer-link" 
+            target="_blank" 
+            rel="nofollow noopener noreferrer">
+            &nbsp;Hexo
+          </a>
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          Theme -
+          <a 
+            href="https://github.com/theme-kaze" 
+            class="footer-link" 
+            target="_blank"
+            rel="nofollow noopener noreferrer">
+            &nbsp;Kaze
+          </a>
+        
+      </div>
+    
+    
+    
+    
+      <div class="footer-dsc">
+        
+          本站总访问量<span id="busuanzi_value_site_pv"></span>次
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          本站总访客数<span id="busuanzi_value_site_uv"></span>次
+        
+      </div>
+      
+    
+</footer>
+ 
+    
+  <a 
+    role="button" 
+    id="scrollbutton" 
+    class="basebutton" 
+    aria-label="回到顶部">
+    <i class="iconfont icon-arrowleft button-icon"></i>
+  </a>
+
+<a 
+  role="button" 
+  id="menubutton"
+  aria-label="menu button"
+  class="basebutton">
+  <i class="iconfont icon-menu button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="popbutton" 
+  class="basebutton" 
+  aria-label="控制中心">
+  <i class="iconfont icon-expand button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="darkbutton" 
+  class="basebutton darkwidget" 
+  aria-label="夜色模式">
+  <i class="iconfont icon-weather button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="searchbutton" 
+  class="basebutton searchwidget" 
+  aria-label="搜索">
+  <i class="iconfont icon-search button-icon"></i>
+</a> 
+     
+     
+      
+
+  
+  
+    
+<link rel="stylesheet" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css">
+
+  
+ 
+     
+     
+      <script>
+  var addImgLayout = function () {
+    var img = document.querySelectorAll('.post-content img')
+    var i
+    for (i = 0; i < img.length; i++) {
+      var wrapper = document.createElement('a')
+      wrapper.setAttribute('href', img[i].getAttribute('data-src'))
+      wrapper.setAttribute('aria-label', 'illustration')
+      wrapper.style.cssText =
+        'width: 100%; display: flex; justify-content: center;'
+      if (img[i].alt) wrapper.dataset.caption = img[i].alt
+      wrapper.dataset.nolink = true
+      img[i].before(wrapper)
+      wrapper.append(img[i])
+      var divWrap = document.createElement('div')
+      divWrap.classList.add('gallery')
+      wrapper.before(divWrap)
+      divWrap.append(wrapper)
+    }
+    baguetteBox.run('.gallery')
+  }
+</script>
+<script>
+  loadScript(
+    "/js/lib/lightbox/baguetteBox.min.js",
+    addImgLayout
+  )
+</script>
+ 
+     
+     
+    <script src="/js/main.js"></script> 
+    
+      <script> 
+        loadScript('/js/lib/busuanzi.min.js') 
+      </script>
+     
+    
+      <script>
+        var addLazyload = function () {
+          var observer = lozad('.lozad', {
+            load: function (el) {
+              el.srcset = el.getAttribute('data-src')
+            },
+            loaded: function (el) {
+              el.classList.add('loaded')
+            },
+          })
+          observer.observe()
+        }
+      </script>
+      <script>
+        loadScript('/js/lib/lozad.min.js', addLazyload)
+      </script>
+    
+    <script src="//instant.page/5.1.0" type="module"
+      integrity="sha384-by67kQnR+pyfy8yWP4kPO12fHKRLHZPfEsiSXR8u2IKcTdxD805MGUXBzVPnkLHw"></script>
+    
+    
+    
+    <!-- Sidebar toggle script -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const leftToggle = document.getElementById('left-sidebar-toggle');
+        const rightToggle = document.getElementById('right-sidebar-toggle');
+        const leftSidebar = document.getElementById('left-sidebar');
+        const rightSidebar = document.getElementById('right-sidebar');
+        
+        // Load saved states from localStorage
+        const leftSidebarState = localStorage.getItem('left-sidebar-state') || 'closed';
+        const rightSidebarState = localStorage.getItem('right-sidebar-state') || 'open';
+        
+        // Apply initial states
+        if (leftSidebarState === 'open') {
+          leftSidebar.classList.add('expanded');
+        }
+        
+        // 右边栏默认展开
+        if (rightSidebarState === 'open' || !rightSidebarState) {
+          rightSidebar.classList.add('expanded');
+        }
+        
+        // Toggle left sidebar
+        leftToggle.addEventListener('click', function() {
+          leftSidebar.classList.toggle('expanded');
+          if (leftSidebar.classList.contains('expanded')) {
+            localStorage.setItem('left-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+        });
+        
+        // Toggle right sidebar
+        rightToggle.addEventListener('click', function() {
+          rightSidebar.classList.toggle('expanded');
+          if (rightSidebar.classList.contains('expanded')) {
+            localStorage.setItem('right-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+        
+        // Close sidebars when clicking outside
+        document.addEventListener('click', function(event) {
+          // Close left sidebar when clicking outside of it
+          if (leftSidebar.classList.contains('expanded') && 
+              !leftSidebar.contains(event.target) && 
+              !leftToggle.contains(event.target)) {
+            leftSidebar.classList.remove('expanded');
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+          
+          // Close right sidebar when clicking outside of it
+          if (rightSidebar.classList.contains('expanded') && 
+              !rightSidebar.contains(event.target) && 
+              !rightToggle.contains(event.target)) {
+            rightSidebar.classList.remove('expanded');
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

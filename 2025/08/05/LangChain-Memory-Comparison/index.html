@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="zh-CN,zh-TW,en,default">
+  <head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, minimum-scale=1.0"
+  />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <meta name="theme-color" content="#fff" id="theme-color" />
+  <meta
+    name="description"
+    content="胖子叔叔的博客屋"
+  />
+  <link rel="icon" href="/img/avantar.jpg" />
+  <title>LangChain Memory 类型详细对比分析</title>
+   
+  <meta
+    property="og:title"
+    content="LangChain Memory 类型详细对比分析"
+  />
+   
+  <meta property="og:url" content="https://loveychen.github.io/2025/08/05/LangChain-Memory-Comparison/index.html" />
+   
+  <meta
+    property="og:img"
+    content="/img/avantar.jpg"
+  />
+    
+  <meta property="og:type" content="article" />
+  <meta property="og:article:published_time" content="2025-08-05" />
+  <meta
+    property="og:article:modified_time"
+    content="2025-08-06"
+  />
+  <meta
+    property="og:article:author"
+    content="深钓大虾"
+  />
+   
+  <meta property="og:article:tag" content="LangChain" />
+  
+  <meta property="og:article:tag" content="LLM Agent" />
+  
+  <meta property="og:article:tag" content="LLM Memory" />
+       <link rel="preload" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css" as="style" > <link rel="preload" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css" as="style" > <link rel="preload" href="/css/main.css" as="style" > 
+  <link rel="modulepreload" href="//instant.page/5.1.0" />
+   <link rel="stylesheet" href="/css/main.css">  <link rel="stylesheet" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css"> 
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css">    <link rel="stylesheet" href="/js/lib/lightbox/baguetteBox.min.css"> 
+
+  <script>
+    // 主题配置
+    const themeConfig = {
+      dark: {
+        colorScheme: "dark",
+        themeColor: "#1c1c1e",
+      },
+      light: {
+        colorScheme: "light",
+        themeColor: "#ffffff",
+      },
+    };
+
+    // 获取当前颜色方案
+    function getCurrentColorScheme() {
+      const userSetting = localStorage.getItem("user-color-scheme");
+      if (userSetting) {
+        return themeConfig[userSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      const pageSetting = document.documentElement.getAttribute(
+        "data-user-color-scheme"
+      );
+      if (pageSetting) {
+        return themeConfig[pageSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      return getSystemColorScheme();
+    }
+
+    // 获取系统颜色方案
+    function getSystemColorScheme() {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+
+    // 设置主题
+    function setTheme(mode) {
+      const theme = mode || getCurrentColorScheme();
+      document.documentElement.setAttribute(
+        "data-user-color-scheme",
+        themeConfig[theme].colorScheme
+      );
+      document.getElementById("theme-color").content =
+        themeConfig[theme].themeColor;
+      document.getElementById("theme-color").dataset.mode = theme;
+
+      // 更新 Mermaid 图表
+      if (typeof mermaid !== "undefined") {
+        const mermaidTheme = theme === "dark" ? "dark" : "default";
+        if (mermaid.getTheme() !== mermaidTheme) {
+          mermaid.initialize(
+            Object.assign({}, mermaidConfig, { theme: mermaidTheme })
+          );
+          mermaid.contentLoaded();
+        }
+      }
+
+      // 更新 Prism 主题
+      if (typeof prismThemeChange === "function") {
+        prismThemeChange();
+      }
+    }
+
+    // 初始化主题
+    setTheme();
+
+    // 监听系统主题变化
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => {
+        setTheme(getSystemColorScheme());
+      });
+
+    // 监听页面主题类变化
+    const observer = new MutationObserver(() => {
+      setTheme();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-user-color-scheme", "class"],
+    });
+  </script>
+
+  <script>
+    function loadScript(url, cb) {
+      var script = document.createElement("script");
+      script.src = url;
+      if (cb) script.onload = cb;
+      script.async = true;
+      document.body.appendChild(script);
+    }
+    function loadCSS(href, data, attr) {
+      var sheet = document.createElement("link");
+      sheet.rel = "stylesheet";
+      sheet.href = href;
+      sheet.dataset[data] = attr;
+      document.head.appendChild(sheet);
+    }
+    function changeCSS(cssFile, data, attr) {
+      var oldlink = document.querySelector("[data-prism]");
+      var newlink = document.createElement("link");
+      newlink.setAttribute("rel", "stylesheet");
+      newlink.setAttribute("href", cssFile);
+      newlink.dataset.prism = attr;
+      document.head.replaceChild(newlink, oldlink);
+    }
+  </script>
+    
+  <script>
+    // control reverse button
+    var reverseDarkList = {
+      dark: "light",
+      light: "dark",
+    };
+    var themeColor = {
+      dark: "#1c1c1e",
+      light: "#fff",
+    };
+    // get the data of css prefers-color-scheme
+    var getCssMediaQuery = function () {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+    // reverse current darkmode setting function
+    var reverseDarkModeSetting = function () {
+      var setting = localStorage.getItem("user-color-scheme");
+      if (reverseDarkList[setting]) {
+        setting = reverseDarkList[setting];
+      } else if (setting === null) {
+        setting = reverseDarkList[getCssMediaQuery()];
+      } else {
+        return;
+      }
+      localStorage.setItem("user-color-scheme", setting);
+      return setting;
+    };
+    // apply current darkmode setting
+  </script>
+  
+  <script>
+    var setDarkmode = function (mode) {
+      var setting = mode || localStorage.getItem("user-color-scheme");
+      if (setting === getCssMediaQuery()) {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else if (reverseDarkList[setting]) {
+        document.documentElement.setAttribute(
+          "data-user-color-scheme",
+          setting
+        );
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content =
+          themeColor[getCssMediaQuery()];
+        document.getElementById("theme-color").dataset.mode =
+          getCssMediaQuery();
+      }
+    };
+    setDarkmode();
+  </script>
+
+  <!-- 推荐使用 CDN，指定具体版本避免兼容性问题 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+
+  <!-- 初始化 Mermaid（若插件未自动初始化） -->
+  <script>
+    // 确保脚本加载完成后初始化
+    window.onload = function () {
+      if (window.mermaid) {
+        mermaid.initialize({
+          theme: "base",
+          startOnLoad: true, // 自动渲染页面中的图表
+          securityLevel: "loose", // 允许更多语法（可选）
+        });
+      }
+    };
+  </script>
+
+     <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.js" as="script"> <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.css" as="style" >   <link rel="preload" href="/js/lib/lozad.min.js" as="script">    
+   <link rel="prefetch" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css" as="script">
+     <link rel="prefetch" href="//unpkg.com/valine@1.4.15/dist/Valine.min.js" as="script">  
+<!-- hexo injector head_end start --><style>
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
+}
+    </style><!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/atom.xml" title="胖子叔叔的博客屋" type="application/atom+xml">
+</head>
+
+  <body>
+    <div class="wrapper">
+       
+      <nav class="navbar">
+
+  <div class="navbar-logo">
+    <a class="navbar-logo-main" href="/">
+      
+        <img 
+          class="navbar-logo-img"
+          width="32"
+          height="32"
+          src="/img/avantar.jpg" 
+          alt="blog logo">
+      
+      <span class="navbar-logo-dsc">胖子叔叔的博客屋</span>
+      </a>
+  </div>
+
+  <div class="navbar-menu">
+    
+      <a 
+        href="/" 
+        class="navbar-menu-item">
+        
+          首页
+        
+      </a>
+    
+      <a 
+        href="/archives" 
+        class="navbar-menu-item">
+        
+          归档
+        
+      </a>
+    
+      <a 
+        href="/tags" 
+        class="navbar-menu-item">
+        
+          标签
+        
+      </a>
+    
+      <a 
+        href="/categories" 
+        class="navbar-menu-item">
+        
+          分类
+        
+      </a>
+    
+      <a 
+        href="/about" 
+        class="navbar-menu-item">
+        
+          关于我
+        
+      </a>
+    
+      <a 
+        href="/shuoshuo" 
+        class="navbar-menu-item">
+        
+          留言板
+        
+      </a>
+    
+    <button 
+      class="navbar-menu-item darknavbar navbar-menu-btn" 
+      aria-label="Toggle dark mode"
+      id="dark">
+      <i class="iconfont icon-weather"></i>
+    </button>
+    <button 
+      class="navbar-menu-item searchnavbar navbar-menu-btn" 
+      aria-label="Toggle search"
+      id="search">
+      <!-- <i 
+        class="iconfont icon-search" 
+        style="font-size: 1.2rem; font-weight: 400;">
+      </i> -->
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img"
+        class="iconify iconify--ion" width="28" height="28" preserveAspectRatio="xMidYMid meet" viewBox="0 0 512 512">
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M256 80a176 176 0 1 0 176 176A176 176 0 0 0 256 80Z"></path>
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M232 160a72 72 0 1 0 72 72a72 72 0 0 0-72-72Z"></path>
+        <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="28"
+          d="M283.64 283.64L336 336"></path>
+      </svg>
+    </button>
+  </div>
+</nav>
+ 
+      
+      <div 
+        id="local-search" 
+        style="display: none">
+        <input
+          class="navbar-menu-item"
+          id="search-input"
+          placeholder="请输入搜索内容..." />
+        <div id="search-content"></div>
+      </div>
+      
+      <div class="section-wrap">
+        <div class="container">
+          <div class="columns">
+            <!-- Left sidebar toggle button -->
+            <button class="sidebar-toggle left-toggle" id="left-sidebar-toggle">
+              <span>点击查看分类和标签</span>
+            </button>
+            
+            <!-- Left sidebar -->
+            <aside class="left-column" id="left-sidebar">
+              
+              <div class="card card-author">
+                
+  <img 
+    src="/img/avantar.jpg" 
+    class="author-img"
+    width="88"
+    height="88"
+    alt="author avatar">
+
+<p class="author-name">深钓大虾</p>
+<p class="author-description">NLP 算法专家</p>
+<div class="author-message">
+  <a 
+    class="author-posts-count" 
+    href="/archives">
+    <span>8</span>
+    <span>文章</span>
+  </a>
+  <a 
+    class="author-categories-count" 
+    href="/categories">
+    <span>6</span>
+    <span>分类</span>
+  </a>
+  <a 
+    class="author-tags-count" 
+    href="/tags">
+    <span>20</span>
+    <span>标签</span>
+  </a>
+</div>
+
+  <div class="author-card-society">
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://github.com/loveychen">
+          <i class="iconfont icon-github society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a href="mailto:loveycd1989@.gmail.com">
+          <i class="iconfont icon-mail society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://www.linkedin.com/in/%E9%9B%95-%E9%99%88-11a958146/">
+          <i class="iconfont icon-linkedin society-icon"></i>
+        </a>
+      </div>
+    
+  </div>
+
+              </div>
+               <div class="sticky-tablet">
+  
+  
+    <article class="display-when-two-columns spacer">
+      <div class="card card-content toc-card">
+        <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">1. 概述</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">2. Memory 类型层次结构</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">3. 各 Memory 类型详细对比</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-BaseMemory-%E5%9F%BA%E7%A1%80%E5%86%85%E5%AD%98%E7%B1%BB"><span class="toc-number">3.1.</span> <span class="toc-text">3.1 BaseMemory (基础内存类)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-BaseChatMemory-%E5%9F%BA%E7%A1%80%E8%81%8A%E5%A4%A9%E5%86%85%E5%AD%98%E7%B1%BB"><span class="toc-number">3.2.</span> <span class="toc-text">3.2 BaseChatMemory (基础聊天内存类)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-ConversationBufferMemory-%E5%AF%B9%E8%AF%9D%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.3.</span> <span class="toc-text">3.3 ConversationBufferMemory (对话缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-4-ConversationBufferWindowMemory-%E7%AA%97%E5%8F%A3%E5%AF%B9%E8%AF%9D%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.4.</span> <span class="toc-text">3.4 ConversationBufferWindowMemory (窗口对话缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-5-ConversationSummaryMemory-%E5%AF%B9%E8%AF%9D%E6%91%98%E8%A6%81%E5%86%85%E5%AD%98"><span class="toc-number">3.5.</span> <span class="toc-text">3.5 ConversationSummaryMemory (对话摘要内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-6-ConversationSummaryBufferMemory-%E6%91%98%E8%A6%81%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.6.</span> <span class="toc-text">3.6 ConversationSummaryBufferMemory (摘要缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-7-VectorStoreRetrieverMemory-%E5%90%91%E9%87%8F%E5%AD%98%E5%82%A8%E6%A3%80%E7%B4%A2%E5%86%85%E5%AD%98"><span class="toc-number">3.7.</span> <span class="toc-text">3.7 VectorStoreRetrieverMemory (向量存储检索内存)</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">4. Memory 类型对比表</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">5. Memory 使用流程对比</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#5-1-ConversationBufferMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.1.</span> <span class="toc-text">5.1 ConversationBufferMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-2-ConversationBufferWindowMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.2.</span> <span class="toc-text">5.2 ConversationBufferWindowMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-3-ConversationSummaryMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.3.</span> <span class="toc-text">5.3 ConversationSummaryMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-4-ConversationSummaryBufferMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.4.</span> <span class="toc-text">5.4 ConversationSummaryBufferMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-5-VectorStoreRetrieverMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.5.</span> <span class="toc-text">5.5 VectorStoreRetrieverMemory 流程</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">6. 使用建议</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#6-1-%E6%A0%B9%E6%8D%AE%E5%AF%B9%E8%AF%9D%E9%95%BF%E5%BA%A6%E9%80%89%E6%8B%A9"><span class="toc-number">6.1.</span> <span class="toc-text">6.1 根据对话长度选择</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-2-%E6%A0%B9%E6%8D%AE%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF%E9%80%89%E6%8B%A9"><span class="toc-number">6.2.</span> <span class="toc-text">6.2 根据应用场景选择</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">7.</span> <span class="toc-text">7. 迁移建议</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">8.</span> <span class="toc-text">8. 总结</span></a></li></ol>
+      </div>
+    </article>
+  
+  
+  <article class="card card-content categories-widget">
+    <div class="categories-card">
+  <div class="categories-header">
+    <i 
+      class="iconfont icon-fenlei" 
+      style="padding-right: 2px;">
+    </i>分类
+  </div>
+  <div class="categories-list">
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/">
+        <div class="categories-list-item">
+          对话系统
+          <span class="categories-list-item-badge">4</span>
+        </div>
+      </a>
+    
+      <a href="/categories/LLM-Agent/">
+        <div class="categories-list-item">
+          LLM-Agent
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/">
+        <div class="categories-list-item">
+          Mathematics
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84/">
+        <div class="categories-list-item">
+          系统架构
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/ConvLab2/">
+        <div class="categories-list-item">
+          对话系统/ConvLab2
+          <span class="categories-list-item-badge">3</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/Probability/">
+        <div class="categories-list-item">
+          Mathematics/Probability
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  <article class="card card-content tags-widget">
+    <div class="tags-card">
+  <div class="tags-header">
+    <i 
+      class="iconfont icon-biaoqian" 
+      style="padding-right: 2px;">
+    </i>热门标签
+  </div>
+  <div class="tags-list">
+    
+      <a 
+        href="/tags/ConvLab2/" 
+        title="ConvLab2">
+        <div class="tags-list-item">ConvLab2</div>
+      </a>
+    
+      <a 
+        href="/tags/TOD/" 
+        title="TOD">
+        <div class="tags-list-item">TOD</div>
+      </a>
+    
+      <a 
+        href="/tags/User-Simulator/" 
+        title="User Simulator">
+        <div class="tags-list-item">User Simulator</div>
+      </a>
+    
+      <a 
+        href="/tags/HUS/" 
+        title="HUS">
+        <div class="tags-list-item">HUS</div>
+      </a>
+    
+      <a 
+        href="/tags/Agenda/" 
+        title="Agenda">
+        <div class="tags-list-item">Agenda</div>
+      </a>
+    
+      <a 
+        href="/tags/TRADE/" 
+        title="TRADE">
+        <div class="tags-list-item">TRADE</div>
+      </a>
+    
+      <a 
+        href="/tags/DST/" 
+        title="DST">
+        <div class="tags-list-item">DST</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/" 
+        title="源码解析">
+        <div class="tags-list-item">源码解析</div>
+      </a>
+    
+      <a 
+        href="/tags/gRPC/" 
+        title="gRPC">
+        <div class="tags-list-item">gRPC</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%A6%82%E7%8E%87%E8%AE%BA/" 
+        title="概率论">
+        <div class="tags-list-item">概率论</div>
+      </a>
+    
+      <a 
+        href="/tags/logit/" 
+        title="logit">
+        <div class="tags-list-item">logit</div>
+      </a>
+    
+      <a 
+        href="/tags/Mathematics/" 
+        title="Mathematics">
+        <div class="tags-list-item">Mathematics</div>
+      </a>
+    
+      <a 
+        href="/tags/Probability/" 
+        title="Probability">
+        <div class="tags-list-item">Probability</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Inference/" 
+        title="LLM Inference">
+        <div class="tags-list-item">LLM Inference</div>
+      </a>
+    
+      <a 
+        href="/tags/VLLM/" 
+        title="VLLM">
+        <div class="tags-list-item">VLLM</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Memory/" 
+        title="LLM Memory">
+        <div class="tags-list-item">LLM Memory</div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <main class="main-column">
+              
+
+
+<article class="card card-content">
+  <header>
+    <h1 class="post-title">
+      LangChain Memory 类型详细对比分析
+    </h1>
+  </header>
+  
+  
+  <div class="post-meta post-show-meta">
+    <time datetime="2025-08-05T12:44:14.000Z">
+      <i 
+        class="iconfont icon-calendar" 
+        style="margin-right: 2px;">
+      </i>
+      <span>2025-08-05</span>
+    </time>
+    
+      <span class="dot"></span>
+      
+        <a 
+          href="/categories/LLM-Agent/" 
+          class="post-meta-link">
+          LLM Agent
+        </a>
+      
+    
+    
+      <span class="dot"></span>
+      <span>3k 字</span>
+    
+  </div>
+
+
+  
+    <div 
+      class="post-meta post-show-meta" 
+      style="margin-top: -10px;">
+      <div style="display: flex; align-items: center;">
+        <i 
+          class="iconfont icon-biaoqian" 
+          style="margin-right: 2px; font-size: 1.15rem;">
+        </i>
+        
+          
+          <a 
+            href="/tags/LangChain/" 
+            class="post-meta-link">
+            LangChain
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/LLM-Agent/" 
+            class="post-meta-link">
+            LLM Agent
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/LLM-Memory/" 
+            class="post-meta-link">
+            LLM Memory
+          </a>
+        
+      </div>
+    </div>
+  
+  </header>
+  <div 
+    id="section" 
+    class="post-content">
+    <h1>1. 概述</h1>
+<p>LangChain 中的 Memory 系统用于在对话和链式调用中维护状态。Memory 可以存储关于过去执行的信息，并将这些信息注入到未来执行的输入中。这对于构建连贯的对话系统尤其重要。</p>
+<p>需要注意的是，当前版本的 Memory 系统已被标记为废弃，将在 LangChain 1.0.0 版本中移除。官方推荐使用新的状态管理方式。</p>
+<h1>2. Memory 类型层次结构</h1>
+<pre class="mermaid">graph TD
+    A[BaseMemory] --> B[BaseChatMemory]
+    B --> C[ConversationBufferMemory]
+    B --> D[ConversationBufferWindowMemory]
+    E[BaseMemory] --> F[VectorStoreRetrieverMemory]
+    B --> G[ConversationSummaryMemory]
+    G --> H[ConversationSummaryBufferMemory]
+    A --> I[其他Memory实现]</pre>
+<h1>3. 各 Memory 类型详细对比</h1>
+<h2 id="3-1-BaseMemory-基础内存类">3.1 BaseMemory (基础内存类)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/core/langchain_core/memory.py">libs/core/langchain_core/memory.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>抽象基类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.3)</td>
+</tr>
+<tr>
+<td>主要方法</td>
+<td>memory_variables, load_memory_variables, save_context, clear</td>
+</tr>
+<tr>
+<td>用途</td>
+<td>所有 Memory 类型的基类</td>
+</tr>
+</tbody>
+</table>
+<p>核心抽象方法:</p>
+<ul>
+<li>memory_variables: 返回内存变量的键列表</li>
+<li>load_memory_variables: 加载内存变量</li>
+<li>save_context: 保存上下文</li>
+<li>clear: 清除内存内容</li>
+</ul>
+<h2 id="3-2-BaseChatMemory-基础聊天内存类">3.2 BaseChatMemory (基础聊天内存类)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/memory/chat_memory.py">libs/langchain/langchain/memory/chat_memory.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>抽象基类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.1)</td>
+</tr>
+<tr>
+<td>继承</td>
+<td>BaseMemory</td>
+</tr>
+<tr>
+<td>主要属性</td>
+<td>chat_memory, output_key, input_key, return_messages</td>
+</tr>
+<tr>
+<td>用途</td>
+<td>聊天相关 Memory 的基类</td>
+</tr>
+</tbody>
+</table>
+<p>核心特性:</p>
+<ul>
+<li>使用 BaseChatMessageHistory 存储消息历史</li>
+<li>提供 _get_input_output 方法来提取输入输出</li>
+<li>实现了 save_context 和 clear 方法</li>
+</ul>
+<h2 id="3-3-ConversationBufferMemory-对话缓冲内存">3.3 ConversationBufferMemory (对话缓冲内存)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/memory/buffer.py">libs/langchain/langchain/memory/buffer.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>具体实现类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.1)</td>
+</tr>
+<tr>
+<td>继承</td>
+<td>BaseChatMemory</td>
+</tr>
+<tr>
+<td>主要属性</td>
+<td>human_prefix, ai_prefix, memory_key</td>
+</tr>
+<tr>
+<td>缓冲区</td>
+<td>存储完整对话历史</td>
+</tr>
+</tbody>
+</table>
+<p>核心特性:</p>
+<ul>
+<li>存储完整的对话历史（所有消息）</li>
+<li>可以以字符串或消息列表形式返回历史</li>
+<li>通过 buffer, buffer_as_str, buffer_as_messages 属性访问历史</li>
+</ul>
+<p>使用示例:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> ConversationBufferMemory</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> ConversationBufferMemory</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好！有什么我可以帮你的吗？"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"我想了解LangChain"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"LangChain是一个用于构建LLM应用的框架"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">print</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">load_memory_variables</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;&#125;))</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 输出包含所有对话历史</span></span></code></pre>
+<p>图示说明:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as 用户
+    participant M as ConversationBufferMemory
+    participant H as InMemoryChatMessageHistory
+
+    U->>M: save_context({"input": "你好"}, {"output": "你好！"})
+    M->>M: _get_input_output()
+    M->>H: add_messages([HumanMessage("你好"), AIMessage("你好！")])
+
+    U->>M: save_context({"input": "介绍一下LangChain"}, {"output": "LangChain是LLM应用框架"})
+    M->>M: _get_input_output()
+    M->>H: add_messages([HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架")])
+
+    U->>M: load_memory_variables({})
+    M->>H: messages
+    H-->>M: [HumanMessage("你好"), AIMessage("你好！"), HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架")]
+    M-->>U: {"history": "Human: 你好\nAI: 你好！\nHuman: 介绍一下LangChain\nAI: LangChain是LLM应用框架"}</pre>
+<h2 id="3-4-ConversationBufferWindowMemory-窗口对话缓冲内存">3.4 ConversationBufferWindowMemory (窗口对话缓冲内存)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/memory/buffer_window.py">libs/langchain/langchain/memory/buffer_window.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>具体实现类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.1)</td>
+</tr>
+<tr>
+<td>继承</td>
+<td>BaseChatMemory</td>
+</tr>
+<tr>
+<td>主要属性</td>
+<td>human_prefix, ai_prefix, memory_key, k</td>
+</tr>
+<tr>
+<td>缓冲区</td>
+<td>存储最近 k 轮对话</td>
+</tr>
+</tbody>
+</table>
+<p>核心特性:</p>
+<ul>
+<li>仅存储最近 k 轮对话（默认 5 轮）</li>
+<li>通过 k 参数控制窗口大小</li>
+<li>自动丢弃超出窗口的历史消息</li>
+</ul>
+<p>使用示例:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> ConversationBufferWindowMemory</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> ConversationBufferWindowMemory</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(k</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#DF69BA;--shiki-dark:#D699B6">2</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)  </span><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 只保留最近2轮对话</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好！"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"介绍一下LangChain"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"LangChain是LLM应用框架"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"它有什么特性"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"它提供了组件化、链式调用等功能"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">print</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">load_memory_variables</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;&#125;))</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 只输出最近2轮对话</span></span></code></pre>
+<p>图示说明:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as 用户
+    participant M as ConversationBufferWindowMemory (k=2)
+    participant H as InMemoryChatMessageHistory
+
+    U->>M: save_context({"input": "你好"}, {"output": "你好！"})
+    M->>H: add_messages([HumanMessage("你好"), AIMessage("你好！")])
+
+    U->>M: save_context({"input": "介绍一下LangChain"}, {"output": "LangChain是LLM应用框架"})
+    M->>H: add_messages([HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架")])
+
+    U->>M: save_context({"input": "它有什么特性"}, {"output": "它提供了组件化、链式调用等功能"})
+    M->>H: add_messages([HumanMessage("它有什么特性"), AIMessage("它提供了组件化、链式调用等功能")])
+
+    U->>M: load_memory_variables({})
+    M->>H: messages[-4:]  # 只取最近2轮（4条消息）
+    H-->>M: [HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架"), HumanMessage("它有什么特性"), AIMessage("它提供了组件化、链式调用等功能")]
+    M-->>U: {"history": "Human: 介绍一下LangChain\nAI: LangChain是LLM应用框架\nHuman: 它有什么特性\nAI: 它提供了组件化、链式调用等功能"}</pre>
+<h2 id="3-5-ConversationSummaryMemory-对话摘要内存">3.5 ConversationSummaryMemory (对话摘要内存)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/memory/summary.py">libs/langchain/langchain/memory/summary.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>具体实现类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.1)</td>
+</tr>
+<tr>
+<td>继承</td>
+<td>BaseChatMemory, SummarizerMixin</td>
+</tr>
+<tr>
+<td>主要属性</td>
+<td>buffer, memory_key, llm, prompt</td>
+</tr>
+<tr>
+<td>缓冲区</td>
+<td>存储对话摘要而非完整历史</td>
+</tr>
+</tbody>
+</table>
+<p>核心特性:</p>
+<ul>
+<li>使用 LLM 生成对话摘要</li>
+<li>每次新增对话时更新摘要</li>
+<li>节省内存和上下文长度</li>
+<li>需要传入 LLM 实例用于生成摘要</li>
+</ul>
+<p>使用示例:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> ConversationSummaryMemory</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain_openai </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> OpenAI</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">llm </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> OpenAI</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> ConversationSummaryMemory</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(llm</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">llm)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好！"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">save_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"input"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"介绍一下LangChain"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;, &#123;</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"output"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"LangChain是LLM应用框架"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;)</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">print</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(memory</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">load_memory_variables</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(&#123;&#125;))</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 输出对话摘要而非完整历史</span></span></code></pre>
+<p>图示说明:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as 用户
+    participant M as ConversationSummaryMemory
+    participant H as InMemoryChatMessageHistory
+    participant L as LLM
+
+    U->>M: save_context({"input": "你好"}, {"output": "你好！"})
+    M->>H: add_messages([HumanMessage("你好"), AIMessage("你好！")])
+    M->>L: predict_new_summary(["Human: 你好", "AI: 你好！"], "")
+    L-->>M: "用户问候，AI回应问候"
+    M->>M: buffer = "用户问候，AI回应问候"
+
+    U->>M: save_context({"input": "介绍一下LangChain"}, {"output": "LangChain是LLM应用框架"})
+    M->>H: add_messages([HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架")])
+    M->>L: predict_new_summary(["Human: 介绍一下LangChain", "AI: LangChain是LLM应用框架"], "用户问候，AI回应问候")
+    L-->>M: "用户问候，AI回应问候。用户询问LangChain介绍，AI解释LangChain是LLM应用框架"
+    M->>M: buffer = "用户问候，AI回应问候。用户询问LangChain介绍，AI解释LangChain是LLM应用框架"
+
+    U->>M: load_memory_variables({})
+    M-->>U: {"history": "用户问候，AI回应问候。用户询问LangChain介绍，AI解释LangChain是LLM应用框架"}</pre>
+<h2 id="3-6-ConversationSummaryBufferMemory-摘要缓冲内存">3.6 ConversationSummaryBufferMemory (摘要缓冲内存)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/memory/summary_buffer.py">libs/langchain/langchain/memory/summary_buffer.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>具体实现类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.1)</td>
+</tr>
+<tr>
+<td>继承</td>
+<td>BaseChatMemory, SummarizerMixin</td>
+</tr>
+<tr>
+<td>主要属性</td>
+<td>buffer, memory_key, llm, prompt, max_token_limit</td>
+</tr>
+<tr>
+<td>缓冲区</td>
+<td>结合完整历史和摘要</td>
+</tr>
+</tbody>
+</table>
+<p>核心特性:</p>
+<ul>
+<li>结合了缓冲和摘要的优点</li>
+<li>保留最近的完整消息，对旧消息进行摘要</li>
+<li>通过 max_token_limit 控制内存使用</li>
+<li>在内存和信息完整性之间取得平衡</li>
+</ul>
+<p>使用示例:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> ConversationSummaryBufferMemory</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain_openai </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> OpenAI</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">llm </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> OpenAI</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> ConversationSummaryBufferMemory</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(llm</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">llm, max_token_limit</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#DF69BA;--shiki-dark:#D699B6">100</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 使用方式与其它Memory类型类似</span></span></code></pre>
+<p>图示说明:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as 用户
+    participant M as ConversationSummaryBufferMemory
+    participant H as InMemoryChatMessageHistory
+    participant L as LLM
+
+    Note over M,H: 初始状态：buffer="", messages=[]
+
+    U->>M: save_context({"input": "你好"}, {"output": "你好！"})
+    M->>H: add_messages([HumanMessage("你好"), AIMessage("你好！")])
+    Note over M,H: buffer="", messages=[HumanMessage("你好"), AIMessage("你好！")]
+
+    U->>M: save_context({"input": "介绍一下LangChain"}, {"output": "LangChain是LLM应用框架"})
+    M->>H: add_messages([HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架")])
+    Note over M,H: buffer="", messages=[HumanMessage("你好"), AIMessage("你好！"), HumanMessage("介绍一下LangChain"), AIMessage("LangChain是LLM应用框架")]
+
+    U->>M: save_context({"input": "它有什么特性"}, {"output": "它提供了组件化、链式调用等功能"})
+    M->>H: add_messages([HumanMessage("它有什么特性"), AIMessage("它提供了组件化、链式调用等功能")])
+
+    Note over M,L: 检查token数量，如果超过max_token_limit
+
+    alt 如果超过token限制
+        M->>L: predict_new_summary(较旧消息, buffer)
+        L-->>M: 更新buffer摘要
+        M->>M: 移除已摘要的消息
+    end
+
+    U->>M: load_memory_variables({})
+    M-->>U: {"history": "摘要内容 + 最近完整消息"}</pre>
+<h2 id="3-7-VectorStoreRetrieverMemory-向量存储检索内存">3.7 VectorStoreRetrieverMemory (向量存储检索内存)</h2>
+<p>文件路径: <a target="_blank" rel="noopener" href="https://github.com/langchain-ai/langchain/blob/master/libs/langchain/langchain/memory/vectorstore.py">libs/langchain/langchain/memory/vectorstore.py</a></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>类型</td>
+<td>具体实现类</td>
+</tr>
+<tr>
+<td>状态</td>
+<td>已废弃 (since 0.3.1)</td>
+</tr>
+<tr>
+<td>继承</td>
+<td>BaseMemory</td>
+</tr>
+<tr>
+<td>主要属性</td>
+<td>retriever, memory_key, input_key, return_docs</td>
+</tr>
+<tr>
+<td>缓冲区</td>
+<td>使用向量存储和检索机制</td>
+</tr>
+</tbody>
+</table>
+<p>核心特性:</p>
+<ul>
+<li>使用向量存储保存对话历史</li>
+<li>根据输入内容检索相关历史</li>
+<li>适用于大规模对话历史场景</li>
+<li>需要传入 VectorStoreRetriever 实例</li>
+</ul>
+<p>使用示例:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> VectorStoreRetrieverMemory</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">vectorstores </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> Chroma</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain_openai </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> OpenAIEmbeddings</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">embedding </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> OpenAIEmbeddings</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">vectorstore </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> Chroma</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"langchain_store"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">, embedding)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">retriever </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> vectorstore</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">as_retriever</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">memory </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> VectorStoreRetrieverMemory</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(retriever</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">retriever)</span></span></code></pre>
+<p>图示说明:</p>
+<pre class="mermaid">sequenceDiagram
+    participant U as 用户
+    participant M as VectorStoreRetrieverMemory
+    participant R as VectorStoreRetriever
+    participant V as VectorStore
+
+    U->>M: save_context({"input": "你好"}, {"output": "你好！"})
+    M->>M: _form_documents()
+    M->>R: add_documents([Document("input: 你好\noutput: 你好！")])
+    R->>V: 存储文档向量化表示
+
+    U->>M: save_context({"input": "介绍一下LangChain"}, {"output": "LangChain是LLM应用框架"})
+    M->>M: _form_documents()
+    M->>R: add_documents([Document("input: 介绍一下LangChain\noutput: LangChain是LLM应用框架")])
+    R->>V: 存储文档向量化表示
+
+    U->>M: load_memory_variables({"input": "什么是LangChain"})
+    M->>R: invoke("什么是LangChain")
+    R->>V: 相似度检索相关历史
+    V-->>R: 相关文档
+    R-->>M: [Document("input: 介绍一下LangChain\noutput: LangChain是LLM应用框架")]
+    M-->>U: {"history": "input: 介绍一下LangChain\noutput: LangChain是LLM应用框架"}</pre>
+<h1>4. Memory 类型对比表</h1>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>ConversationBufferMemory</th>
+<th>ConversationBufferWindowMemory</th>
+<th>ConversationSummaryMemory</th>
+<th>ConversationSummaryBufferMemory</th>
+<th>VectorStoreRetrieverMemory</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>存储方式</td>
+<td>完整历史</td>
+<td>固定窗口</td>
+<td>摘要</td>
+<td>混合(近期完整+历史摘要)</td>
+<td>向量存储</td>
+</tr>
+<tr>
+<td>内存使用</td>
+<td>高</td>
+<td>中等</td>
+<td>低</td>
+<td>中等</td>
+<td>取决于向量存储</td>
+</tr>
+<tr>
+<td>上下文相关性</td>
+<td>全部</td>
+<td>最近 K 轮</td>
+<td>摘要</td>
+<td>混合</td>
+<td>基于相似度检索</td>
+</tr>
+<tr>
+<td>实现复杂度</td>
+<td>简单</td>
+<td>简单</td>
+<td>复杂(需要 LLM)</td>
+<td>复杂(需要 LLM)</td>
+<td>复杂(需要向量存储)</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>短对话</td>
+<td>中等长度对话</td>
+<td>长对话</td>
+<td>长对话</td>
+<td>大规模对话历史</td>
+</tr>
+<tr>
+<td>需要 LLM</td>
+<td>否</td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+<td>否</td>
+</tr>
+<tr>
+<td>需要向量存储</td>
+<td>否</td>
+<td>否</td>
+<td>否</td>
+<td>否</td>
+<td>是</td>
+</tr>
+</tbody>
+</table>
+<h1>5. Memory 使用流程对比</h1>
+<h2 id="5-1-ConversationBufferMemory-流程">5.1 ConversationBufferMemory 流程</h2>
+<pre class="mermaid">graph LR
+    A[保存上下文] --> B[添加到消息历史]
+    C[加载内存变量] --> D[返回完整历史]</pre>
+<h2 id="5-2-ConversationBufferWindowMemory-流程">5.2 ConversationBufferWindowMemory 流程</h2>
+<pre class="mermaid">graph LR
+    A[保存上下文] --> B[添加到消息历史]
+    C[加载内存变量] --> D[截取最近K轮消息]
+    D --> E[返回截取的历史]</pre>
+<h2 id="5-3-ConversationSummaryMemory-流程">5.3 ConversationSummaryMemory 流程</h2>
+<pre class="mermaid">graph LR
+    A[保存上下文] --> B[添加到消息历史]
+    B --> C[使用LLM生成新摘要]
+    C --> D[更新摘要缓冲区]
+    E[加载内存变量] --> F[返回摘要]</pre>
+<h2 id="5-4-ConversationSummaryBufferMemory-流程">5.4 ConversationSummaryBufferMemory 流程</h2>
+<pre class="mermaid">graph LR
+    A[保存上下文] --> B[添加到消息历史]
+    B --> C{消息长度是否超过限制}
+    C -->|是| D[使用LLM摘要旧消息]
+    D --> E[更新摘要缓冲区]
+    E --> F[移除已摘要消息]
+    C -->|否| G[保持原状]
+    H[加载内存变量] --> I[返回摘要+近期完整消息]</pre>
+<h2 id="5-5-VectorStoreRetrieverMemory-流程">5.5 VectorStoreRetrieverMemory 流程</h2>
+<pre class="mermaid">graph LR
+    A[保存上下文] --> B[格式化为文档]
+    B --> C[存储到向量数据库]
+    D[加载内存变量] --> E[根据输入检索相关历史]
+    E --> F[返回相关历史]</pre>
+<h1>6. 使用建议</h1>
+<h2 id="6-1-根据对话长度选择">6.1 根据对话长度选择</h2>
+<ol>
+<li>
+<p><strong>短对话</strong> (&lt; 10 轮) - 使用 ConversationBufferMemory</p>
+<ul>
+<li>简单直接</li>
+<li>保持完整的上下文信息</li>
+</ul>
+</li>
+<li>
+<p><strong>中等长度对话</strong> (10-50 轮) - 使用 ConversationBufferWindowMemory</p>
+<ul>
+<li>限制历史长度，节省内存</li>
+<li>保持近期上下文的完整性</li>
+</ul>
+</li>
+<li>
+<p><strong>长对话</strong> (&gt; 50 轮) - 使用 ConversationSummaryBufferMemory</p>
+<ul>
+<li>平衡内存使用和上下文完整性</li>
+<li>保持近期完整信息和历史摘要</li>
+</ul>
+</li>
+</ol>
+<h2 id="6-2-根据应用场景选择">6.2 根据应用场景选择</h2>
+<ol>
+<li>
+<p><strong>精确上下文要求</strong> - 使用 ConversationBufferMemory 或 ConversationBufferWindowMemory</p>
+<ul>
+<li>适用于需要精确引用历史对话的场景</li>
+</ul>
+</li>
+<li>
+<p><strong>大规模历史存储</strong> - 使用 VectorStoreRetrieverMemory</p>
+<ul>
+<li>适用于需要存储大量历史且基于相关性检索的场景</li>
+</ul>
+</li>
+<li>
+<p><strong>内存受限环境</strong> - 使用 ConversationSummaryMemory</p>
+<ul>
+<li>适用于内存有限但需要保持长期记忆的场景</li>
+</ul>
+</li>
+</ol>
+<h1>7. 迁移建议</h1>
+<p>由于所有 Memory 类型都已被标记为废弃，建议按照官方迁移指南进行迁移:</p>
+<ul>
+<li>查看迁移指南: <a target="_blank" rel="noopener" href="https://python.langchain.com/docs/versions/migrating_memory/">https://python.langchain.com/docs/versions/migrating_memory/</a></li>
+<li>考虑使用 LangGraph 进行状态管理</li>
+<li>使用新的聊天历史接口</li>
+</ul>
+<p>新的推荐方式:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 使用新的聊天历史接口</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain_core</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">messages </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> HumanMessage, AIMessage</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">from</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> langchain_core</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">chat_history </span><span style="color:#DF69BA;--shiki-dark:#D699B6">import</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> InMemoryChatMessageHistory</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">chat_history </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> InMemoryChatMessageHistory</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">chat_history</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">add_message</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#8DA101;--shiki-dark:#A7C080">HumanMessage</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(content</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">))</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">chat_history</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">add_message</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#8DA101;--shiki-dark:#A7C080">AIMessage</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(content</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">"你好！有什么我可以帮你的吗？"</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">))</span></span></code></pre>
+<h1>8. 总结</h1>
+<p>LangChain 的 Memory 系统提供了多种管理对话历史的方式，每种方式都有其适用场景。虽然这些功能已被标记为废弃，但在当前版本中仍然可以使用。在新项目中，建议直接使用官方推荐的新方式来管理对话状态。</p>
+<p>通过以上图示对比，可以更直观地理解各种 Memory 类型的工作原理和适用场景，有助于在实际项目中做出合适的选择。</p>
+
+  </div>
+
+  
+  <div>
+    
+      <div 
+        class="post-note note-warning copyright" 
+        style="margin-top: 42px">
+        <p>
+          <span style="font-weight: bold;">作者：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="/about">
+            深钓大虾
+          </a>
+        </p>
+        <p>
+          <span style="font-weight: bold;">文章链接：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="https://loveychen.github.io/2025/08/05/LangChain-Memory-Comparison/">
+            https://loveychen.github.io/2025/08/05/LangChain-Memory-Comparison/
+          </a>
+        </p>
+        <p><span style="font-weight: bold;">版权声明：</span>本博客所有文章除特别声明外，均采用<a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh">CC BY-NC-SA 4.0 协议</a>。转载请注明出处！</p>
+      </div>
+    
+  </div>
+</article>
+<div class="nav">
+  
+  
+    <div class="nav-item-next">
+      <a 
+        href="/2025/06/12/Learning-VLLM-serve-model/" 
+        class="nav-link">
+        <div>
+          <div class="nav-label">下一篇</div>
+          
+            <div class="nav-title">VLLM 学习之路(一) - 模型服务 </div>
+          
+        </div>
+        <i class="iconfont icon-right nav-next-icon"></i>
+      </a>
+    </div>
+  
+</div>
+
+  <div 
+    class="card card-content comment-card" 
+    style="margin-top: 16px;">
+    <div class="comment-card-title">评论</div>
+    
+  <div id="vcomments"></div>
+  
+  <script>
+    loadScript("//unpkg.com/valine@1.4.15/dist/Valine.min.js");
+    var oldLoadVa = window.onload;
+    window.onload = function () {
+      oldLoadVa && oldLoadVa();
+      new Valine({
+        el: '#vcomments',
+        appId: 'LC7p0faybQsaBhYb4lg1yjQd-MdYXbMMI',
+        appKey: 'uu6JdEPv1lLNFqIMvsG0EKOs',
+        placeholder: '请多指教',
+        path: window.location.pathname,
+        avatar: 'mp',
+        meta: ["nick","mail"],
+        pageSize: '10',
+        lang: '',
+        visitor: 'false',
+        highlight: true,
+        recordIP: false,
+        
+        
+        
+        enableQQ: 'false',
+        requiredFields: [],
+      });
+    };
+  </script>
+
+  </div>
+
+<div 
+  class="card card-content toc-card" 
+  id="mobiletoc">
+  <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">1. 概述</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">2. Memory 类型层次结构</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">3. 各 Memory 类型详细对比</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-BaseMemory-%E5%9F%BA%E7%A1%80%E5%86%85%E5%AD%98%E7%B1%BB"><span class="toc-number">3.1.</span> <span class="toc-text">3.1 BaseMemory (基础内存类)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-BaseChatMemory-%E5%9F%BA%E7%A1%80%E8%81%8A%E5%A4%A9%E5%86%85%E5%AD%98%E7%B1%BB"><span class="toc-number">3.2.</span> <span class="toc-text">3.2 BaseChatMemory (基础聊天内存类)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-ConversationBufferMemory-%E5%AF%B9%E8%AF%9D%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.3.</span> <span class="toc-text">3.3 ConversationBufferMemory (对话缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-4-ConversationBufferWindowMemory-%E7%AA%97%E5%8F%A3%E5%AF%B9%E8%AF%9D%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.4.</span> <span class="toc-text">3.4 ConversationBufferWindowMemory (窗口对话缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-5-ConversationSummaryMemory-%E5%AF%B9%E8%AF%9D%E6%91%98%E8%A6%81%E5%86%85%E5%AD%98"><span class="toc-number">3.5.</span> <span class="toc-text">3.5 ConversationSummaryMemory (对话摘要内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-6-ConversationSummaryBufferMemory-%E6%91%98%E8%A6%81%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.6.</span> <span class="toc-text">3.6 ConversationSummaryBufferMemory (摘要缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-7-VectorStoreRetrieverMemory-%E5%90%91%E9%87%8F%E5%AD%98%E5%82%A8%E6%A3%80%E7%B4%A2%E5%86%85%E5%AD%98"><span class="toc-number">3.7.</span> <span class="toc-text">3.7 VectorStoreRetrieverMemory (向量存储检索内存)</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">4. Memory 类型对比表</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">5. Memory 使用流程对比</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#5-1-ConversationBufferMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.1.</span> <span class="toc-text">5.1 ConversationBufferMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-2-ConversationBufferWindowMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.2.</span> <span class="toc-text">5.2 ConversationBufferWindowMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-3-ConversationSummaryMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.3.</span> <span class="toc-text">5.3 ConversationSummaryMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-4-ConversationSummaryBufferMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.4.</span> <span class="toc-text">5.4 ConversationSummaryBufferMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-5-VectorStoreRetrieverMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.5.</span> <span class="toc-text">5.5 VectorStoreRetrieverMemory 流程</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">6. 使用建议</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#6-1-%E6%A0%B9%E6%8D%AE%E5%AF%B9%E8%AF%9D%E9%95%BF%E5%BA%A6%E9%80%89%E6%8B%A9"><span class="toc-number">6.1.</span> <span class="toc-text">6.1 根据对话长度选择</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-2-%E6%A0%B9%E6%8D%AE%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF%E9%80%89%E6%8B%A9"><span class="toc-number">6.2.</span> <span class="toc-text">6.2 根据应用场景选择</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">7.</span> <span class="toc-text">7. 迁移建议</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">8.</span> <span class="toc-text">8. 总结</span></a></li></ol>
+</div>
+
+            </main>
+            
+            <!-- Right sidebar -->
+            <aside class="right-column" id="right-sidebar">
+              <div class="sticky-widescreen">
+  
+  
+    <article class="card card-content toc-card">
+      <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">1. 概述</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">2. Memory 类型层次结构</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">3. 各 Memory 类型详细对比</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#3-1-BaseMemory-%E5%9F%BA%E7%A1%80%E5%86%85%E5%AD%98%E7%B1%BB"><span class="toc-number">3.1.</span> <span class="toc-text">3.1 BaseMemory (基础内存类)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-2-BaseChatMemory-%E5%9F%BA%E7%A1%80%E8%81%8A%E5%A4%A9%E5%86%85%E5%AD%98%E7%B1%BB"><span class="toc-number">3.2.</span> <span class="toc-text">3.2 BaseChatMemory (基础聊天内存类)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-3-ConversationBufferMemory-%E5%AF%B9%E8%AF%9D%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.3.</span> <span class="toc-text">3.3 ConversationBufferMemory (对话缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-4-ConversationBufferWindowMemory-%E7%AA%97%E5%8F%A3%E5%AF%B9%E8%AF%9D%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.4.</span> <span class="toc-text">3.4 ConversationBufferWindowMemory (窗口对话缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-5-ConversationSummaryMemory-%E5%AF%B9%E8%AF%9D%E6%91%98%E8%A6%81%E5%86%85%E5%AD%98"><span class="toc-number">3.5.</span> <span class="toc-text">3.5 ConversationSummaryMemory (对话摘要内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-6-ConversationSummaryBufferMemory-%E6%91%98%E8%A6%81%E7%BC%93%E5%86%B2%E5%86%85%E5%AD%98"><span class="toc-number">3.6.</span> <span class="toc-text">3.6 ConversationSummaryBufferMemory (摘要缓冲内存)</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#3-7-VectorStoreRetrieverMemory-%E5%90%91%E9%87%8F%E5%AD%98%E5%82%A8%E6%A3%80%E7%B4%A2%E5%86%85%E5%AD%98"><span class="toc-number">3.7.</span> <span class="toc-text">3.7 VectorStoreRetrieverMemory (向量存储检索内存)</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">4. Memory 类型对比表</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">5. Memory 使用流程对比</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#5-1-ConversationBufferMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.1.</span> <span class="toc-text">5.1 ConversationBufferMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-2-ConversationBufferWindowMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.2.</span> <span class="toc-text">5.2 ConversationBufferWindowMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-3-ConversationSummaryMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.3.</span> <span class="toc-text">5.3 ConversationSummaryMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-4-ConversationSummaryBufferMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.4.</span> <span class="toc-text">5.4 ConversationSummaryBufferMemory 流程</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#5-5-VectorStoreRetrieverMemory-%E6%B5%81%E7%A8%8B"><span class="toc-number">5.5.</span> <span class="toc-text">5.5 VectorStoreRetrieverMemory 流程</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">6. 使用建议</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#6-1-%E6%A0%B9%E6%8D%AE%E5%AF%B9%E8%AF%9D%E9%95%BF%E5%BA%A6%E9%80%89%E6%8B%A9"><span class="toc-number">6.1.</span> <span class="toc-text">6.1 根据对话长度选择</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#6-2-%E6%A0%B9%E6%8D%AE%E5%BA%94%E7%94%A8%E5%9C%BA%E6%99%AF%E9%80%89%E6%8B%A9"><span class="toc-number">6.2.</span> <span class="toc-text">6.2 根据应用场景选择</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">7.</span> <span class="toc-text">7. 迁移建议</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">8.</span> <span class="toc-text">8. 总结</span></a></li></ol>
+    </article>
+  
+  
+  <article class="card card-content">
+    <div class="recent-posts-card">
+  <div class="recent-posts-header">
+    <i 
+      class="iconfont icon-wenzhang_huaban" 
+      style="padding-right: 2px;">
+    </i>最近文章
+  </div>
+  <div class="recent-posts-list">
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-08-05</div>
+        <a href="/2025/08/05/LangChain-Memory-Comparison/"><div class="recent-posts-item-content">LangChain Memory 类型详细对比分析</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-06-12</div>
+        <a href="/2025/06/12/Learning-VLLM-serve-model/"><div class="recent-posts-item-content">VLLM 学习之路(一) - 模型服务</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2022-11-24</div>
+        <a href="/2022/11/24/brief-intro-to-logit/"><div class="recent-posts-item-content">从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2021-06-11</div>
+        <a href="/2021/06/11/20210611-memory-network-for-ds/"><div class="recent-posts-item-content">Memory Network 在对话系统中的应用</div></a>
+      </div>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <!-- Right sidebar toggle button -->
+            <button class="sidebar-toggle right-toggle" id="right-sidebar-toggle">
+              <span>点击查看目录</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+     
+    <footer class="footer">
+  <div class="footer-container">
+    <div>
+      <div class="footer-dsc">
+        <span>
+          Copyright ©
+          
+            2020
+          
+          
+                - 
+                2025
+          
+        </span>
+        &nbsp;
+        <a 
+          href="/" 
+          class="footer-link">
+          
+        </a>
+      </div>
+    </div>
+
+    
+      <div class="footer-dsc">
+        
+          Powered by
+          <a 
+            href="https://hexo.io/" 
+            class="footer-link" 
+            target="_blank" 
+            rel="nofollow noopener noreferrer">
+            &nbsp;Hexo
+          </a>
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          Theme -
+          <a 
+            href="https://github.com/theme-kaze" 
+            class="footer-link" 
+            target="_blank"
+            rel="nofollow noopener noreferrer">
+            &nbsp;Kaze
+          </a>
+        
+      </div>
+    
+    
+    
+    
+      <div class="footer-dsc">
+        
+          本站总访问量<span id="busuanzi_value_site_pv"></span>次
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          本站总访客数<span id="busuanzi_value_site_uv"></span>次
+        
+      </div>
+      
+    
+</footer>
+ 
+    
+  <a 
+    role="button" 
+    id="scrollbutton" 
+    class="basebutton" 
+    aria-label="回到顶部">
+    <i class="iconfont icon-arrowleft button-icon"></i>
+  </a>
+
+<a 
+  role="button" 
+  id="menubutton"
+  aria-label="menu button"
+  class="basebutton">
+  <i class="iconfont icon-menu button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="popbutton" 
+  class="basebutton" 
+  aria-label="控制中心">
+  <i class="iconfont icon-expand button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="darkbutton" 
+  class="basebutton darkwidget" 
+  aria-label="夜色模式">
+  <i class="iconfont icon-weather button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="searchbutton" 
+  class="basebutton searchwidget" 
+  aria-label="搜索">
+  <i class="iconfont icon-search button-icon"></i>
+</a> 
+     
+     
+      
+
+  
+  
+    
+<link rel="stylesheet" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css">
+
+  
+ 
+     
+     
+      <script>
+  var addImgLayout = function () {
+    var img = document.querySelectorAll('.post-content img')
+    var i
+    for (i = 0; i < img.length; i++) {
+      var wrapper = document.createElement('a')
+      wrapper.setAttribute('href', img[i].getAttribute('data-src'))
+      wrapper.setAttribute('aria-label', 'illustration')
+      wrapper.style.cssText =
+        'width: 100%; display: flex; justify-content: center;'
+      if (img[i].alt) wrapper.dataset.caption = img[i].alt
+      wrapper.dataset.nolink = true
+      img[i].before(wrapper)
+      wrapper.append(img[i])
+      var divWrap = document.createElement('div')
+      divWrap.classList.add('gallery')
+      wrapper.before(divWrap)
+      divWrap.append(wrapper)
+    }
+    baguetteBox.run('.gallery')
+  }
+</script>
+<script>
+  loadScript(
+    "/js/lib/lightbox/baguetteBox.min.js",
+    addImgLayout
+  )
+</script>
+ 
+     
+     
+    <script src="/js/main.js"></script> 
+    
+      <script> 
+        loadScript('/js/lib/busuanzi.min.js') 
+      </script>
+     
+    
+      <script>
+        var addLazyload = function () {
+          var observer = lozad('.lozad', {
+            load: function (el) {
+              el.srcset = el.getAttribute('data-src')
+            },
+            loaded: function (el) {
+              el.classList.add('loaded')
+            },
+          })
+          observer.observe()
+        }
+      </script>
+      <script>
+        loadScript('/js/lib/lozad.min.js', addLazyload)
+      </script>
+    
+    <script src="//instant.page/5.1.0" type="module"
+      integrity="sha384-by67kQnR+pyfy8yWP4kPO12fHKRLHZPfEsiSXR8u2IKcTdxD805MGUXBzVPnkLHw"></script>
+    
+    
+    
+    <!-- Sidebar toggle script -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const leftToggle = document.getElementById('left-sidebar-toggle');
+        const rightToggle = document.getElementById('right-sidebar-toggle');
+        const leftSidebar = document.getElementById('left-sidebar');
+        const rightSidebar = document.getElementById('right-sidebar');
+        
+        // Load saved states from localStorage
+        const leftSidebarState = localStorage.getItem('left-sidebar-state') || 'closed';
+        const rightSidebarState = localStorage.getItem('right-sidebar-state') || 'open';
+        
+        // Apply initial states
+        if (leftSidebarState === 'open') {
+          leftSidebar.classList.add('expanded');
+        }
+        
+        // 右边栏默认展开
+        if (rightSidebarState === 'open' || !rightSidebarState) {
+          rightSidebar.classList.add('expanded');
+        }
+        
+        // Toggle left sidebar
+        leftToggle.addEventListener('click', function() {
+          leftSidebar.classList.toggle('expanded');
+          if (leftSidebar.classList.contains('expanded')) {
+            localStorage.setItem('left-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+        });
+        
+        // Toggle right sidebar
+        rightToggle.addEventListener('click', function() {
+          rightSidebar.classList.toggle('expanded');
+          if (rightSidebar.classList.contains('expanded')) {
+            localStorage.setItem('right-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+        
+        // Close sidebars when clicking outside
+        document.addEventListener('click', function(event) {
+          // Close left sidebar when clicking outside of it
+          if (leftSidebar.classList.contains('expanded') && 
+              !leftSidebar.contains(event.target) && 
+              !leftToggle.contains(event.target)) {
+            leftSidebar.classList.remove('expanded');
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+          
+          // Close right sidebar when clicking outside of it
+          if (rightSidebar.classList.contains('expanded') && 
+              !rightSidebar.contains(event.target) && 
+              !rightToggle.contains(event.target)) {
+            rightSidebar.classList.remove('expanded');
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

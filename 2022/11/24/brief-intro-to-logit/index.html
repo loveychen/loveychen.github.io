@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="zh-CN,zh-TW,en,default">
+  <head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, minimum-scale=1.0"
+  />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <meta name="theme-color" content="#fff" id="theme-color" />
+  <meta
+    name="description"
+    content="胖子叔叔的博客屋"
+  />
+  <link rel="icon" href="/img/avantar.jpg" />
+  <title>从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚</title>
+   
+  <meta
+    property="og:title"
+    content="从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚"
+  />
+   
+  <meta property="og:url" content="https://loveychen.github.io/2022/11/24/brief-intro-to-logit/index.html" />
+   
+  <meta
+    property="og:img"
+    content="/img/avantar.jpg"
+  />
+    
+  <meta property="og:type" content="article" />
+  <meta property="og:article:published_time" content="2022-11-24" />
+  <meta
+    property="og:article:modified_time"
+    content="2025-08-06"
+  />
+  <meta
+    property="og:article:author"
+    content="深钓大虾"
+  />
+   
+  <meta property="og:article:tag" content="Probability" />
+  
+  <meta property="og:article:tag" content="Mathematics" />
+  
+  <meta property="og:article:tag" content="logit" />
+  
+  <meta property="og:article:tag" content="概率论" />
+       <link rel="preload" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css" as="style" > <link rel="preload" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css" as="style" > <link rel="preload" href="/css/main.css" as="style" > 
+  <link rel="modulepreload" href="//instant.page/5.1.0" />
+   <link rel="stylesheet" href="/css/main.css">  <link rel="stylesheet" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css"> 
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css">    <link rel="stylesheet" href="/js/lib/lightbox/baguetteBox.min.css"> 
+
+  <script>
+    // 主题配置
+    const themeConfig = {
+      dark: {
+        colorScheme: "dark",
+        themeColor: "#1c1c1e",
+      },
+      light: {
+        colorScheme: "light",
+        themeColor: "#ffffff",
+      },
+    };
+
+    // 获取当前颜色方案
+    function getCurrentColorScheme() {
+      const userSetting = localStorage.getItem("user-color-scheme");
+      if (userSetting) {
+        return themeConfig[userSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      const pageSetting = document.documentElement.getAttribute(
+        "data-user-color-scheme"
+      );
+      if (pageSetting) {
+        return themeConfig[pageSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      return getSystemColorScheme();
+    }
+
+    // 获取系统颜色方案
+    function getSystemColorScheme() {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+
+    // 设置主题
+    function setTheme(mode) {
+      const theme = mode || getCurrentColorScheme();
+      document.documentElement.setAttribute(
+        "data-user-color-scheme",
+        themeConfig[theme].colorScheme
+      );
+      document.getElementById("theme-color").content =
+        themeConfig[theme].themeColor;
+      document.getElementById("theme-color").dataset.mode = theme;
+
+      // 更新 Mermaid 图表
+      if (typeof mermaid !== "undefined") {
+        const mermaidTheme = theme === "dark" ? "dark" : "default";
+        if (mermaid.getTheme() !== mermaidTheme) {
+          mermaid.initialize(
+            Object.assign({}, mermaidConfig, { theme: mermaidTheme })
+          );
+          mermaid.contentLoaded();
+        }
+      }
+
+      // 更新 Prism 主题
+      if (typeof prismThemeChange === "function") {
+        prismThemeChange();
+      }
+    }
+
+    // 初始化主题
+    setTheme();
+
+    // 监听系统主题变化
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => {
+        setTheme(getSystemColorScheme());
+      });
+
+    // 监听页面主题类变化
+    const observer = new MutationObserver(() => {
+      setTheme();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-user-color-scheme", "class"],
+    });
+  </script>
+
+  <script>
+    function loadScript(url, cb) {
+      var script = document.createElement("script");
+      script.src = url;
+      if (cb) script.onload = cb;
+      script.async = true;
+      document.body.appendChild(script);
+    }
+    function loadCSS(href, data, attr) {
+      var sheet = document.createElement("link");
+      sheet.rel = "stylesheet";
+      sheet.href = href;
+      sheet.dataset[data] = attr;
+      document.head.appendChild(sheet);
+    }
+    function changeCSS(cssFile, data, attr) {
+      var oldlink = document.querySelector("[data-prism]");
+      var newlink = document.createElement("link");
+      newlink.setAttribute("rel", "stylesheet");
+      newlink.setAttribute("href", cssFile);
+      newlink.dataset.prism = attr;
+      document.head.replaceChild(newlink, oldlink);
+    }
+  </script>
+    
+  <script>
+    // control reverse button
+    var reverseDarkList = {
+      dark: "light",
+      light: "dark",
+    };
+    var themeColor = {
+      dark: "#1c1c1e",
+      light: "#fff",
+    };
+    // get the data of css prefers-color-scheme
+    var getCssMediaQuery = function () {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+    // reverse current darkmode setting function
+    var reverseDarkModeSetting = function () {
+      var setting = localStorage.getItem("user-color-scheme");
+      if (reverseDarkList[setting]) {
+        setting = reverseDarkList[setting];
+      } else if (setting === null) {
+        setting = reverseDarkList[getCssMediaQuery()];
+      } else {
+        return;
+      }
+      localStorage.setItem("user-color-scheme", setting);
+      return setting;
+    };
+    // apply current darkmode setting
+  </script>
+  
+  <script>
+    var setDarkmode = function (mode) {
+      var setting = mode || localStorage.getItem("user-color-scheme");
+      if (setting === getCssMediaQuery()) {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else if (reverseDarkList[setting]) {
+        document.documentElement.setAttribute(
+          "data-user-color-scheme",
+          setting
+        );
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content =
+          themeColor[getCssMediaQuery()];
+        document.getElementById("theme-color").dataset.mode =
+          getCssMediaQuery();
+      }
+    };
+    setDarkmode();
+  </script>
+
+  <!-- 推荐使用 CDN，指定具体版本避免兼容性问题 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+
+  <!-- 初始化 Mermaid（若插件未自动初始化） -->
+  <script>
+    // 确保脚本加载完成后初始化
+    window.onload = function () {
+      if (window.mermaid) {
+        mermaid.initialize({
+          theme: "base",
+          startOnLoad: true, // 自动渲染页面中的图表
+          securityLevel: "loose", // 允许更多语法（可选）
+        });
+      }
+    };
+  </script>
+
+     <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.js" as="script"> <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.css" as="style" >   <link rel="preload" href="/js/lib/lozad.min.js" as="script">    
+   <link rel="prefetch" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css" as="script">
+     <link rel="prefetch" href="//unpkg.com/valine@1.4.15/dist/Valine.min.js" as="script">  
+<!-- hexo injector head_end start --><style>
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
+}
+    </style><!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/atom.xml" title="胖子叔叔的博客屋" type="application/atom+xml">
+</head>
+
+  <body>
+    <div class="wrapper">
+       
+      <nav class="navbar">
+
+  <div class="navbar-logo">
+    <a class="navbar-logo-main" href="/">
+      
+        <img 
+          class="navbar-logo-img"
+          width="32"
+          height="32"
+          src="/img/avantar.jpg" 
+          alt="blog logo">
+      
+      <span class="navbar-logo-dsc">胖子叔叔的博客屋</span>
+      </a>
+  </div>
+
+  <div class="navbar-menu">
+    
+      <a 
+        href="/" 
+        class="navbar-menu-item">
+        
+          首页
+        
+      </a>
+    
+      <a 
+        href="/archives" 
+        class="navbar-menu-item">
+        
+          归档
+        
+      </a>
+    
+      <a 
+        href="/tags" 
+        class="navbar-menu-item">
+        
+          标签
+        
+      </a>
+    
+      <a 
+        href="/categories" 
+        class="navbar-menu-item">
+        
+          分类
+        
+      </a>
+    
+      <a 
+        href="/about" 
+        class="navbar-menu-item">
+        
+          关于我
+        
+      </a>
+    
+      <a 
+        href="/shuoshuo" 
+        class="navbar-menu-item">
+        
+          留言板
+        
+      </a>
+    
+    <button 
+      class="navbar-menu-item darknavbar navbar-menu-btn" 
+      aria-label="Toggle dark mode"
+      id="dark">
+      <i class="iconfont icon-weather"></i>
+    </button>
+    <button 
+      class="navbar-menu-item searchnavbar navbar-menu-btn" 
+      aria-label="Toggle search"
+      id="search">
+      <!-- <i 
+        class="iconfont icon-search" 
+        style="font-size: 1.2rem; font-weight: 400;">
+      </i> -->
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img"
+        class="iconify iconify--ion" width="28" height="28" preserveAspectRatio="xMidYMid meet" viewBox="0 0 512 512">
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M256 80a176 176 0 1 0 176 176A176 176 0 0 0 256 80Z"></path>
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M232 160a72 72 0 1 0 72 72a72 72 0 0 0-72-72Z"></path>
+        <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="28"
+          d="M283.64 283.64L336 336"></path>
+      </svg>
+    </button>
+  </div>
+</nav>
+ 
+      
+      <div 
+        id="local-search" 
+        style="display: none">
+        <input
+          class="navbar-menu-item"
+          id="search-input"
+          placeholder="请输入搜索内容..." />
+        <div id="search-content"></div>
+      </div>
+      
+      <div class="section-wrap">
+        <div class="container">
+          <div class="columns">
+            <!-- Left sidebar toggle button -->
+            <button class="sidebar-toggle left-toggle" id="left-sidebar-toggle">
+              <span>点击查看分类和标签</span>
+            </button>
+            
+            <!-- Left sidebar -->
+            <aside class="left-column" id="left-sidebar">
+              
+              <div class="card card-author">
+                
+  <img 
+    src="/img/avantar.jpg" 
+    class="author-img"
+    width="88"
+    height="88"
+    alt="author avatar">
+
+<p class="author-name">深钓大虾</p>
+<p class="author-description">NLP 算法专家</p>
+<div class="author-message">
+  <a 
+    class="author-posts-count" 
+    href="/archives">
+    <span>8</span>
+    <span>文章</span>
+  </a>
+  <a 
+    class="author-categories-count" 
+    href="/categories">
+    <span>6</span>
+    <span>分类</span>
+  </a>
+  <a 
+    class="author-tags-count" 
+    href="/tags">
+    <span>20</span>
+    <span>标签</span>
+  </a>
+</div>
+
+  <div class="author-card-society">
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://github.com/loveychen">
+          <i class="iconfont icon-github society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a href="mailto:loveycd1989@.gmail.com">
+          <i class="iconfont icon-mail society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://www.linkedin.com/in/%E9%9B%95-%E9%99%88-11a958146/">
+          <i class="iconfont icon-linkedin society-icon"></i>
+        </a>
+      </div>
+    
+  </div>
+
+              </div>
+               <div class="sticky-tablet">
+  
+  
+    <article class="display-when-two-columns spacer">
+      <div class="card card-content toc-card">
+        <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">逻辑回归中的“逻辑”</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">“逻辑” 词源</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">logic 的含义</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">Logistic 函数</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">logistic 词源探秘: 一些有趣的小知识</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#logistic-%E8%AF%8D%E6%BA%90"><span class="toc-number">5.1.</span> <span class="toc-text">logistic 词源</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#log-%E8%AF%8D%E6%A0%B9"><span class="toc-number">5.2.</span> <span class="toc-text">log- 词根</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Logistics-%E7%89%A9%E6%B5%81-%E5%90%8E%E5%8B%A4"><span class="toc-number">5.3.</span> <span class="toc-text">Logistics, 物流 &#x2F; 后勤</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%80%9C%E7%89%A9%E6%B5%81%E2%80%9D-%E4%B8%AD%E7%9A%84-%E2%80%9C%E9%80%BB%E8%BE%91%E2%80%9D"><span class="toc-number">5.3.1.</span> <span class="toc-text">“物流” 中的 “逻辑”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#logistics-%E8%AF%8D%E6%BA%90"><span class="toc-number">5.3.2.</span> <span class="toc-text">logistics 词源</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">Logistic 分布</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">7.</span> <span class="toc-text">logit</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">8.</span> <span class="toc-text">总结</span></a></li></ol>
+      </div>
+    </article>
+  
+  
+  <article class="card card-content categories-widget">
+    <div class="categories-card">
+  <div class="categories-header">
+    <i 
+      class="iconfont icon-fenlei" 
+      style="padding-right: 2px;">
+    </i>分类
+  </div>
+  <div class="categories-list">
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/">
+        <div class="categories-list-item">
+          对话系统
+          <span class="categories-list-item-badge">4</span>
+        </div>
+      </a>
+    
+      <a href="/categories/LLM-Agent/">
+        <div class="categories-list-item">
+          LLM-Agent
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/">
+        <div class="categories-list-item">
+          Mathematics
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84/">
+        <div class="categories-list-item">
+          系统架构
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/ConvLab2/">
+        <div class="categories-list-item">
+          对话系统/ConvLab2
+          <span class="categories-list-item-badge">3</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/Probability/">
+        <div class="categories-list-item">
+          Mathematics/Probability
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  <article class="card card-content tags-widget">
+    <div class="tags-card">
+  <div class="tags-header">
+    <i 
+      class="iconfont icon-biaoqian" 
+      style="padding-right: 2px;">
+    </i>热门标签
+  </div>
+  <div class="tags-list">
+    
+      <a 
+        href="/tags/ConvLab2/" 
+        title="ConvLab2">
+        <div class="tags-list-item">ConvLab2</div>
+      </a>
+    
+      <a 
+        href="/tags/TOD/" 
+        title="TOD">
+        <div class="tags-list-item">TOD</div>
+      </a>
+    
+      <a 
+        href="/tags/User-Simulator/" 
+        title="User Simulator">
+        <div class="tags-list-item">User Simulator</div>
+      </a>
+    
+      <a 
+        href="/tags/HUS/" 
+        title="HUS">
+        <div class="tags-list-item">HUS</div>
+      </a>
+    
+      <a 
+        href="/tags/Agenda/" 
+        title="Agenda">
+        <div class="tags-list-item">Agenda</div>
+      </a>
+    
+      <a 
+        href="/tags/TRADE/" 
+        title="TRADE">
+        <div class="tags-list-item">TRADE</div>
+      </a>
+    
+      <a 
+        href="/tags/DST/" 
+        title="DST">
+        <div class="tags-list-item">DST</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/" 
+        title="源码解析">
+        <div class="tags-list-item">源码解析</div>
+      </a>
+    
+      <a 
+        href="/tags/gRPC/" 
+        title="gRPC">
+        <div class="tags-list-item">gRPC</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%A6%82%E7%8E%87%E8%AE%BA/" 
+        title="概率论">
+        <div class="tags-list-item">概率论</div>
+      </a>
+    
+      <a 
+        href="/tags/logit/" 
+        title="logit">
+        <div class="tags-list-item">logit</div>
+      </a>
+    
+      <a 
+        href="/tags/Mathematics/" 
+        title="Mathematics">
+        <div class="tags-list-item">Mathematics</div>
+      </a>
+    
+      <a 
+        href="/tags/Probability/" 
+        title="Probability">
+        <div class="tags-list-item">Probability</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Inference/" 
+        title="LLM Inference">
+        <div class="tags-list-item">LLM Inference</div>
+      </a>
+    
+      <a 
+        href="/tags/VLLM/" 
+        title="VLLM">
+        <div class="tags-list-item">VLLM</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Memory/" 
+        title="LLM Memory">
+        <div class="tags-list-item">LLM Memory</div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <main class="main-column">
+              
+
+
+<article class="card card-content">
+  <header>
+    <h1 class="post-title">
+      从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚
+    </h1>
+  </header>
+  
+  
+  <div class="post-meta post-show-meta">
+    <time datetime="2022-11-24T12:44:14.000Z">
+      <i 
+        class="iconfont icon-calendar" 
+        style="margin-right: 2px;">
+      </i>
+      <span>2022-11-24</span>
+    </time>
+    
+      <span class="dot"></span>
+      
+        <a 
+          href="/categories/Mathematics/" 
+          class="post-meta-link">
+          Mathematics
+        </a>
+      
+        <a 
+          href="/categories/Mathematics/Probability/" 
+          class="post-meta-link">
+          Probability
+        </a>
+      
+    
+    
+      <span class="dot"></span>
+      <span>4.8k 字</span>
+    
+  </div>
+
+
+  
+    <div 
+      class="post-meta post-show-meta" 
+      style="margin-top: -10px;">
+      <div style="display: flex; align-items: center;">
+        <i 
+          class="iconfont icon-biaoqian" 
+          style="margin-right: 2px; font-size: 1.15rem;">
+        </i>
+        
+          
+          <a 
+            href="/tags/Probability/" 
+            class="post-meta-link">
+            Probability
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/Mathematics/" 
+            class="post-meta-link">
+            Mathematics
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/logit/" 
+            class="post-meta-link">
+            logit
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/%E6%A6%82%E7%8E%87%E8%AE%BA/" 
+            class="post-meta-link">
+            概率论
+          </a>
+        
+      </div>
+    </div>
+  
+  </header>
+  <div 
+    id="section" 
+    class="post-content">
+    <p>逻辑回归 (Logistic Regression, LR) 是一种经典的机器学习模型, 在很多机器学习任务(比如广告推荐, 推荐排序等)中, 都可以作为 baseline 模型使用.</p>
+<p>从名字上看, LR 包含 Logistic 和 Regression 两个单词, 其中</p>
+<ul>
+<li>Logistic 源自 Logistic Distribution, LR 中使用 Logistic 分布建模分类概率</li>
+<li>Regression 源自 Linear Regression, LR 中的采用了回归的思路来建模分类问题</li>
+</ul>
+<p>因此, LR 的两个单词完全概括了它的两个组成部分: 使用线性回归模型将特征转换成一个实数, 然后实用逻辑分布将该实数转换为分类概率.</p>
+<p>看到这里, 你是不是会想: 又有人要来水逻辑回归的博文了 …</p>
+<p>先别忙下结论, 逻辑回归只是我们这篇文章的引子, 我们在这篇文章中主要聊一聊 “逻辑” 这个词的前世今生.</p>
+<h1>逻辑回归中的“逻辑”</h1>
+<p>逻辑回归中有两个地方跟“逻辑“挂钩， 前面已经提到了逻辑分布（the Logistic Distribution）。</p>
+<p>另一个地方是 logit。逻辑回归中的线性模型部分就是在建模事件发生的 logit.</p>
+<p>logit 一般翻译为 ”对数比， 对数几率“。1944年 Joseph Berkson 在创造这个术语时，恐怕同时受到了 logarithm (对数) 和 logistic function (逻辑函数) 的双重影响。<br>
+不管怎样，logit、logistic、logarith 应该都跟 logic 是同根词，大家都源自词根 <a target="_blank" rel="noopener" href="https://membean.com/roots/log-word">log-</a>。</p>
+<p>从数学上讲，<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span> 被预测为正类 的 logit 是其 odds 的对数。 odds 一般翻译为 ”几率&quot;, 它的英文解释是 “the probability (= how likely it is) that a particular thing will or will not happen”,即 一个事件发生和不发生的比率。<br>
+不过英文解释中的 probability 并不满足 probability 在数学上的定义，因为 odds 值域是非负实数域 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mstyle scriptlevel="0" displaystyle="true"><msup><mi mathvariant="bold">R</mi><mo lspace="0em" rspace="0em">∗</mo></msup></mstyle></mrow><annotation encoding="application/x-tex">\displaystyle \mathbf{R}^{*}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.7387em;"></span><span class="mord"><span class="mord mathbf">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7387em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">∗</span></span></span></span></span></span></span></span></span></span></span></span>, 而不是 <code>[0, 1]</code> 这个闭区间.</p>
+<p>我们用数学语言重新描述一下上面的解释。对于二分类任务，LR 将样本 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="bold-italic">x</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{x}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4444em;"></span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span></span></span></span> 被划分为正类的概率建模如下：</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>Y</mi><mo>=</mo><mn>1</mn><mi mathvariant="normal">∣</mi><mi mathvariant="bold-italic">x</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mi><mrow><mi mathvariant="bold-italic">W</mi><mi mathvariant="bold-italic">x</mi></mrow></mi></mrow></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">P(Y=1|\boldsymbol{x}) = \frac{1}{1 + e^{-\boldsymbol{Wx}}}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.22222em;">Y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1∣</span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0908em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight"><span class="mord mtight"><span class="mord boldsymbol mtight">Wx</span></span></span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p>其中 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="bold-italic">W</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{W}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6861em;"></span><span class="mord"><span class="mord"><span class="mord boldsymbol" style="margin-right:0.15972em;">W</span></span></span></span></span></span> 是需要学习的参数. 这里用到了 Logistic Function，是 LR 中 Logistic 一词的由来。</p>
+<p>该样本被划分为正类的 odds 则可以表示如下:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mtable rowspacing="0.25em" columnalign="right left" columnspacing="0em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mtext>odds</mtext><mi>P</mi><mo stretchy="false">(</mo><mi>Y</mi><mo>=</mo><mn>1</mn><mi mathvariant="normal">∣</mi><mi mathvariant="bold-italic">x</mi><mo stretchy="false">)</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><mfrac><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>Y</mi><mo>=</mo><mn>1</mn><mi mathvariant="normal">∣</mi><mi mathvariant="bold-italic">x</mi><mo stretchy="false">)</mo></mrow><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>Y</mi><mo>=</mo><mn>0</mn><mi mathvariant="normal">∣</mi><mi mathvariant="bold-italic">x</mi><mo stretchy="false">)</mo></mrow></mfrac></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><msup><mi>e</mi><mi><mrow><mi mathvariant="bold-italic">W</mi><mi mathvariant="bold-italic">x</mi></mrow></mi></msup></mrow></mstyle></mtd></mtr></mtable><annotation encoding="application/x-tex">\begin{aligned}
+\text{odds} P(Y=1|\boldsymbol{x}) &amp;= \frac{P(Y=1| \boldsymbol{x})}{P(Y=0|\boldsymbol{x})} \\
+               &amp;= e^{\boldsymbol{Wx}}
+\end{aligned}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:4.2163em;vertical-align:-1.8581em;"></span><span class="mord"><span class="mtable"><span class="col-align-r"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.3581em;"><span style="top:-4.3581em;"><span class="pstrut" style="height:3.427em;"></span><span class="mord"><span class="mord text"><span class="mord">odds</span></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.22222em;">Y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1∣</span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span><span class="mclose">)</span></span></span><span style="top:-2.2289em;"><span class="pstrut" style="height:3.427em;"></span><span class="mord"></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.8581em;"><span></span></span></span></span></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:2.3581em;"><span style="top:-4.3581em;"><span class="pstrut" style="height:3.427em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.22222em;">Y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">0∣</span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.22222em;">Y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1∣</span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span><span style="top:-2.2289em;"><span class="pstrut" style="height:3.427em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8933em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord mtight"><span class="mord boldsymbol mtight">Wx</span></span></span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.8581em;"><span></span></span></span></span></span></span></span></span></span></span></span></p>
+<p>因此其 logit 为:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mtable rowspacing="0.25em" columnalign="right left" columnspacing="0em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mtext>logit</mtext><mi>P</mi><mo stretchy="false">(</mo><mi>Y</mi><mo>=</mo><mn>1</mn><mi mathvariant="normal">∣</mi><mi mathvariant="bold-italic">x</mi><mo stretchy="false">)</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><mi>log</mi><mo>⁡</mo><mtext>odds</mtext><mi>P</mi><mo stretchy="false">(</mo><mi>Y</mi><mo>=</mo><mn>1</mn><mi mathvariant="normal">∣</mi><mi mathvariant="bold-italic">x</mi><mo stretchy="false">)</mo></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><mi><mrow><mi mathvariant="bold-italic">W</mi><mi mathvariant="bold-italic">x</mi></mrow></mi></mrow></mstyle></mtd></mtr></mtable><annotation encoding="application/x-tex">\begin{aligned}
+\text{logit} P(Y=1|\boldsymbol{x}) &amp;= \log \text{odds}  P(Y=1|\boldsymbol{x}) \\
+                             &amp;= \boldsymbol{Wx}
+\end{aligned}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:3em;vertical-align:-1.25em;"></span><span class="mord"><span class="mtable"><span class="col-align-r"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.75em;"><span style="top:-3.91em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">logit</span></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.22222em;">Y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1∣</span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span><span class="mclose">)</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.25em;"><span></span></span></span></span></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.75em;"><span style="top:-3.91em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord text"><span class="mord">odds</span></span><span class="mord mathnormal" style="margin-right:0.13889em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.22222em;">Y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord">1∣</span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span><span class="mclose">)</span></span></span><span style="top:-2.41em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mord"><span class="mord boldsymbol">Wx</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.25em;"><span></span></span></span></span></span></span></span></span></span></span></span></p>
+<p>logit 最终可以表示成样本特征 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="bold-italic">x</mi></mrow><annotation encoding="application/x-tex">\boldsymbol{x}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4444em;"></span><span class="mord"><span class="mord"><span class="mord boldsymbol">x</span></span></span></span></span></span> 的线性回归（Linear Regression）模型，这是 LR 中 Regression 一词的由来。</p>
+<p>在后面的章节中，我将详细介绍 LR 中各种 ”逻辑“ 的详细的来龙去脉。</p>
+<h1>“逻辑” 词源</h1>
+<p>首先看一下 “逻辑” 这个中文词的来源。</p>
+<p>中文词 “逻辑” 是一个外来词, 由中国清末翻译家严复先生所创, 它是对英文词 <strong>logic</strong> 的音译.</p>
+<p>&quot;逻辑&quot;一词后由中国传入日本, 读作 ロジック。 但在日语中则注明只是对Logic的注音，Logic在日语中的正式汉语翻译词为“论理”（ろんり）。</p>
+<p>logic 还有一个很好的意译：“理则”，这是由孙中山先生所译。孙中山先生<a target="_blank" rel="noopener" href="http://www.sunyat-sen.org/index.php?m=content&amp;c=index&amp;a=show&amp;catid=46&amp;id=6662">《建国方略.以作文为证》</a>中：“然则逻辑究为何物？当译以何名而后妥……吾以为当译之为‘理则’者也……学者之对于理则之学，则大都如陶渊明之读书，不求甚解而已。”</p>
+<p>现代汉语中，“逻辑” 有四种常见含义:</p>
+<ol>
+<li>指客观事物的规律。例如：“历史的逻辑决定了人类社会将一直向前发展”</li>
+<li>指某种特殊的理论、观点或看问题的方法。例如：“侵略者奉行的是强盗逻辑”</li>
+<li>指思维的规律、规则。例如：“写文章要讲逻辑”</li>
+<li>指逻辑学这门科学。例如：“大学生要学点逻辑”</li>
+</ol>
+<h1>logic 的含义</h1>
+<p>前面讲到，中文词 ”逻辑“ 是英文单词 ”logic“ 的音译。 我们再详细探究一下英文词 ”logic“ 的含义和来源。</p>
+<p>柯林斯词典对 logic 给出了三个解释:</p>
+<ul>
+<li><strong>Logic</strong> is a method of reasoning that involves <strong>a series of statements</strong>, each of which must be true if the statement before it is true. 逻辑 (学)</li>
+<li>The <strong>logic</strong> of a conclusion or an argument is <strong>its quality of being correct and reasonable</strong>. (结论或观点的) 逻辑
+<ul>
+<li>eg. I don’t follow the logic of your argument.</li>
+</ul>
+</li>
+<li>A particular kind of <strong>logic</strong> is the way of thinking and reasoning about things that is characteristic of a particular type of person or particular field of activity. (某种人或某行为领域的) 逻辑
+<ul>
+<li>eg. The plan was based on sound commercial logic.  (商业逻辑)</li>
+</ul>
+</li>
+</ul>
+<p>logic 从词源上看,</p>
+<blockquote>
+<ul>
+<li>mid-14c., <strong>logike</strong>, “branch of philosophy that treats of forms of thinking; the science of distinction of true from false reasoning,”</li>
+<li>from Old French <strong>logique</strong> (13c.),</li>
+<li>from Latin <strong>(ars)logica</strong> “logic,”</li>
+<li>from Greek <strong>(he)logike (techne)</strong>  “(the) reasoning (art),”</li>
+<li>from fem. of <strong>logikos</strong> “pertaining to speaking or reasoning” (also “of or pertaining to speech”),</li>
+<li>from <strong>logos</strong> “reason, idea, word” (see Logos).</li>
+<li>Formerly also <strong>logick</strong>.</li>
+</ul>
+<p>Sometimes formerly plural, as in ethics, but this is not usual.</p>
+<ul>
+<li>Meaning “logical argumentation” is from c. 1600. Contemptuous logic-chopper “sophist, person who uses subtle distinctions in argument” is from 1846.</li>
+</ul>
+</blockquote>
+<h1>Logistic 函数</h1>
+<p>此处主要参考 <a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Logistic_function">Wikipedia: Logistic function</a>.</p>
+<p>Logistic Function 是比利时数学家 <a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Pierre_Fran%C3%A7ois_Verhulst">Pierre François Verhulst</a>在 1838 ~ 1847 的三篇论文中提出的, 其目的是通过调整指数增长模型, 对人口增长函数进行建模. Logistic 很好的解释了人口增长模型的三个阶段:</p>
+<ul>
+<li>指数增长阶段: 在初始阶段, 人口呈现几何增长趋势</li>
+<li>线性增长阶段: 随着逐渐饱和, 增长曲线放缓至线性增长</li>
+<li>滞胀阶段: 在成熟阶段, 人口停止增长</li>
+</ul>
+<p>你可以从 Logistic 函数的函数图像上获得更直观的感受.</p>
+<p>Verhulst 在 30 年代设计了该函数, 并于 1838 年发表了一个简短说明; 1844年进一步分析了该函数, 并给出正式命名 (对应论文则是 1845 年发表的).</p>
+<blockquote>
+<p><strong>Logistic 函数名字由来</strong><br>
+Verhulst 在1845年发表的论文中将该曲线命名为 <strong>logistic</strong>, 但是并没有解释原因. 从这一点上看,Verhulst 实在不讲逻辑了 (a pun) !<br>
+参考 <a target="_blank" rel="noopener" href="https://www.quora.com/How-did-a-%E2%80%9Clogistic-equation%E2%80%9D-get-its-name-Does-logistic-mean-logical-or-logistic-work">Quora: How did “logistic equation” get its name?</a></p>
+</blockquote>
+<p>Logistic 函数的数学表达式如下</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mi>L</mi><mrow><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>k</mi><mo stretchy="false">(</mo><mi>x</mi><mo>−</mo><msub><mi>x</mi><mn>0</mn></msub><mo stretchy="false">)</mo></mrow></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">f(x) = \frac{L}{1 + e ^ {-k (x - x_0)}}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.1477em;vertical-align:-0.7873em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.296em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.814em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight" style="margin-right:0.03148em;">k</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight">x</span><span class="mbin mtight">−</span><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3173em;"><span style="top:-2.357em;margin-left:0em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="sizing reset-size3 size1 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.143em;"><span></span></span></span></span></span></span><span class="mclose mtight">)</span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">L</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7873em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p>其中,</p>
+<ul>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>x</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">x_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> 是 S 曲线的中点 (mid-point)</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi></mrow><annotation encoding="application/x-tex">L</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">L</span></span></span></span> 是曲线的最大值</li>
+<li><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span></span></span></span> 为曲线的增长率 (或称为陡度)</li>
+</ul>
+<p>当 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>x</mi><mn>0</mn></msub><mo>=</mo><mn>0</mn><mo separator="true">,</mo><mi>L</mi><mo>=</mo><mn>1</mn><mo separator="true">,</mo><mi>k</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">x_0 = 0, L = 1, k = 1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> 时, 称之为 <strong>标准逻辑函数</strong> (Standard Logistic Function), 其表达式及函数图像如下:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>x</mi></mrow></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">f(x) = \frac{1}{1 + e^{-x}}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:2.0908em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6973em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">x</span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p><img src="/2022/11/24/brief-intro-to-logit/Logistic-curve.svg.png" alt="标准逻辑回归函数" srcset="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20300%20300'%3E%3C/svg%3E" data-src="/2022/11/24/brief-intro-to-logit/Logistic-curve.svg.png" class="lozad post-image"></p>
+<h1>logistic 词源探秘: 一些有趣的小知识</h1>
+<p>前面提到, logistic function 中 logistic 是 Verhulst 命名的, 并且并没有给出使用 “logistic” 一词的理由.</p>
+<p>logistic 函数到底跟 logistic 的本义有什么联系呢? 能不能从 logistic 的本义上引申出 logistic 函数的某些性质呢?</p>
+<p>我们带着疑问, 查一下 logistic 的本义。以下是柯林斯大词典给出的解释:</p>
+<blockquote>
+<p>ADJ. <strong>Logistic</strong> or <strong>logistical</strong> means relating to the organization of something complicated. “物流的, 后勤的”<br>
+eg.</p>
+<ol>
+<li>Logistical problems may be causing the delay. 物流问题可能会造成延期</li>
+<li>She described the distribution of food and medical supplies as a logistical nightmare. 她将食品和医疗用品的分发描述为后勤噩梦。</li>
+</ol>
+</blockquote>
+<p>咦? 怎么跟 “物流, 后勤” 扯上关系了? 再查!</p>
+<p>下面是剑桥英汉词典给出的解释:</p>
+<blockquote>
+<p>ADJ. relating to the careful organization of a complicated activity. “后勤的”<br>
+egs.</p>
+<ol>
+<li>logistical support / problems, 后勤支持 / 问题</li>
+<li>Assigning an armed federal officer to every commercial flight would be a logistical nightmare. 为每一次民用航班配备一名武装联邦军人将是一场后勤噩梦。</li>
+</ol>
+</blockquote>
+<p>等等, 我们不是在搞 “逻辑” 吗? 咋跟 后勤和物流杠上了？”逻辑&quot; 哪去了?</p>
+<p>柯林斯词典还给出了一些其它解释:</p>
+<blockquote>
+<ol>
+<li>N. an uninterpreted calculus or system of symbolic logic Compare formal language</li>
+<li>ADJ, mathematics. (of a curve) having an equation of the form <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>=</mo><mi>k</mi><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mi>a</mi><mo>+</mo><mi>b</mi><mi>x</mi></mrow></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">y = k / (1 + e^{a + bx})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.03588em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.03148em;">k</span><span class="mord">/</span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="base"><span class="strut" style="height:1.0991em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">a</span><span class="mbin mtight">+</span><span class="mord mathnormal mtight">b</span><span class="mord mathnormal mtight">x</span></span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span>, where <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi></mrow><annotation encoding="application/x-tex">b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span> is less than zero</li>
+<li>ADJ, rare. of, relating to, or skilled in arithmetical calculations.</li>
+</ol>
+<p><strong>Word origin</strong><br>
+C17: via French, from Late Latin logisticus of calculation, from Greek logistikos rational, from logos word, reason</p>
+</blockquote>
+<p>对于这些解释, 我的个人观点是: 这恐怕是 Verhulst 的 logistic function 这只鸡下的蛋呀!</p>
+<p>既然都查了这么多了, 我们还是有始有终, 完整的查一下 logistic 这个词的词源关系和构词结构吧.</p>
+<h2 id="logistic-词源">logistic 词源</h2>
+<p>logistic, 也可以写作 logistical, 是一个形容词, 其含义是 “relating to the <strong>careful</strong> organization of a <strong>complicated</strong> activity”, 中文解释为 “后勤的”.</p>
+<p>logistic 从词源上看,</p>
+<blockquote>
+<ul>
+<li>“pertaining to logic,” 1620s, from Medieval Latin <strong>logisticus</strong>,</li>
+<li>from Greek <strong>logistikos</strong> “skilled in calculating; endued with reason,” from logistes “a calculator,”</li>
+<li>from <strong>logos</strong> “calculation, proportion” (see Logos).</li>
+</ul>
+<p>Related: Logistical (1560s); logistically.</p>
+<p><strong>Logistics</strong>, from this word, in the sense “art of arithmetical calculation” is from 1650s.</p>
+</blockquote>
+<p>logistic 从构词上看, <code>log- + -istic</code>, 由词根 <code>log-</code> (表示 “说话”, 引申为 “学说”) 和 形容词后缀 <code>-istic</code> (表示 “…的”).  <code>-istic</code> 是一个符合后缀, 由 <code>-ist + -ic</code> 构成.</p>
+<h2 id="log-词根"><code>log-</code> 词根</h2>
+<p><code>log-</code> 词根表示 “说话, 推理, 计算”, 源自希腊词汇 log (means “word”), 引申为 “学说” (常用词根 <code>-logy</code> 表示 (means “study of”), 如 biology, mythology).</p>
+<p>源于该词根的单词示例如下:</p>
+<ul>
+<li>log: book of “words”, 日记, 日志</li>
+<li>catalog: listing of “words”, 目录</li>
+<li>dialogue: “words” between people, 对话</li>
+<li>monologue: “words” of one person, 独白</li>
+<li>prologue: “words” beforehand, 前言, 开场白, 引子, 序</li>
+<li>epilogue: after “words”, 收场白, 后记, 跋</li>
+<li>logophile: “words” lover, 爱好词语的人</li>
+<li>logprrhea: “word” diarrhea, 多言症, 速语癖</li>
+<li>biology: “study” of life, 生物学</li>
+<li>zoology: “study” of animals, 动物学</li>
+<li>etymology: “study” of the origin of words, 词源学</li>
+<li>genealogy: “study” of one’s family history, 家谱(学), 宗谱(学)</li>
+</ul>
+<p>logic 虽然与 logistic 属于同根词, 但是其相对于词根 <code>log-</code> 的本意已经相去甚远了.</p>
+<h2 id="Logistics-物流-后勤">Logistics, 物流 / 后勤</h2>
+<p>我们回过头来看 logistic 的本义吧.</p>
+<p>前面提到, logistic 的本义是 “relating to the organization of something complicated”, 中文一般翻译为 “物流的, 后勤的”.</p>
+<p>Logistic 有个复数名词形式: logistics, 其英文含义是 “the careful organization of a complicated activity so that it happens in a successful and effective way”, 中文翻译为 “后勤, 物流; 物流学, 后勤学”.</p>
+<p>中文词 “后勤” 还是从日语借过来的.</p>
+<p>鉴于中国和日本的一千多年的文化交流和恩怨纠葛, 现代汉语中有大量的日语借词, 比如 xx主义 / 萝莉 / 便当 / 经济 / 世界, 等等.</p>
+<blockquote>
+<p><strong>日语借词</strong><br>
+汉语中的日语借词指汉语由日语引入的借词。是华语圈与日语圈之间语言交流的一部分。汉语从日本借用辞汇发生在近代，主要以汉字为媒介。日语借词对现代汉语的形成有重要的作用。<br>
+具体来讲, 现代汉语中的日语借词有如下几类:</p>
+<ol>
+<li><strong>和制汉语,</strong> 又称“日源汉词”、“和来语”，是指现代汉语中从日语借用的新词。它又分为如下三种类型:
+<ul>
+<li>日本自制汉语词, 如: 电话, 干部, 艺术, 肯定, 否定, 假设, 直接, 海拔, 航空母舰 等</li>
+<li>源自汉语,但被日本人赋予新意的汉语词, 如: 社会, 经济 等. (一些学者称之为 “回归词”)</li>
+<li>汉语古已有之, 且在日语中意义变化不大, 这一类可以认为不属于日语借词, 但常被人误以为来自日语。如：革命、政府、封建、科学、纪律 等</li>
+</ul>
+</li>
+<li><strong>来源于 “宛字” 的词</strong>，“宛字”，日语“当て字／宛て字”。日语传统上多用汉字，有时非汉语词也利用汉字的读音（音读与训读皆可能用到）以汉字纪录，如“滅茶苦茶（めちゃくちゃ）”。这种做法类似于六书的假借，但为区别于中国的假借，本文称之为“宛字”。分为两类：
+<ul>
+<li>来源于和语宛字的词，较少，例如：寿司（すし）</li>
+<li>来源于外来语宛字的词，如：クラブ“倶乐部”、ロマン“浪漫”、ガス“瓦斯”、コンクリート“混凝土”、リンパ“淋巴”等</li>
+</ul>
+</li>
+<li><strong>和语词以汉字写法引入</strong>，绝大部分的和语的人名、地名等专有名词是以汉字写法而非读音直接引入汉语。部分一般辞汇亦以汉字写法直接引入汉语，如：取消(取り消し)、场合(ばあい)、立场(たちば)、手续(てつづき)、出口(でぐち)、入口(いりぐち)、取缔(とりしまり)、见习(みならい)等</li>
+<li><strong>日语自身读法的音译</strong>，此类词汇多是日语本身非以汉字表达的词汇，但华人习惯于以汉字引入日本辞汇（包括专有名词），所以以音译方式输入了若干日本词。如“卡拉OK”（カラオケ），“榻榻米”（畳）等。商标的例子较多，如“马自达”（マツダ，松田）、“日产”的俗名“尼桑”、“立邦漆”（Nippon Paint）等。</li>
+<li><strong>流通于台湾的日语借词</strong>，如“便当（弁当）”、“欧巴桑（おばさん）”、“秀逗（ショート）”。不少在战后已被国语词汇取代并以台语读之。但现今尚有“水道水 tsuí-tō-tsuí（自来水）”、“注射 tsù-siā（打针）”、“注文 tsù-bûn（订购）”、“案内 àn-nāi（带路）”、“看板 khang-pang（招牌）”，甚至外来语如“oo-tó-bái（オートバイ，摩托车）”、“bì-lù（ビール，啤酒）”、“jiàn-bà（ジャンパー，夹克）”、和语如“a-sá-lih（あっさり，果断）”“oo-bá-sáng（おばさん，阿姨）”“sa-sí-mih（刺身，生鱼片）”</li>
+<li><strong>日本流行文化引进的和制汉语</strong>，如 声优、女优、攻略、暴走、援交、人气等</li>
+</ol>
+<p>更多信息可以参考 <a target="_blank" rel="noopener" href="https://zh.wikipedia.org/zh-sg/%E6%BC%A2%E8%AA%9E%E4%B8%AD%E7%9A%84%E6%97%A5%E8%AA%9E%E5%80%9F%E8%A9%9E">汉语中的日语借词</a> 以及 <a target="_blank" rel="noopener" href="https://zhuanlan.zhihu.com/p/419407308">知乎: 日语借词为何在现代汉语中大行其道</a>.</p>
+</blockquote>
+<h3 id="“物流”-中的-“逻辑”">“物流” 中的 “逻辑”</h3>
+<p>以下内容来自 <a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Logistics">英文维基百科: Logistics</a> 和 <a target="_blank" rel="noopener" href="https://zh.wikipedia.org/wiki/%E7%89%A9%E6%B5%81">中文维基百科: 物流</a>.</p>
+<p><strong>物流（英语：Logistics）</strong>，是军事领域后勤概念的民间用语。</p>
+<p>在西方该词语源于希腊语：λογιστικός, Logistikos，意为“计数科学”或“精于算计”。</p>
+<p>“物流”是一套通过计算、策划来控制原材料、制成品、产成品或信息在供、需、仓储不同部之间转运的管理系统。“物流”或也可详称为其最终目的之“策略性物流运输”或“策运”。物质资料从供给者到需求者的物理运动，是创造时间价值、场所价值和一定的加工价值的活动。物流是指物质实体从供应者向需求者的物理移动，它由一系列创造时间价值和空间价值的经济活动组成，包括运输、保管、配送、包装、装卸、流通加工及处理等多项基本活动，是这些活动的统一。</p>
+<p>相关概念最早出现于军事行政组织，在中国古代一直被称为辎重，后来在近代被逐渐改为后勤。</p>
+<p>现代的“物流”概念最早可能是以在二战中，围绕战争物资供应，美军创建的后勤理论为原型的。当时的「后勤」是指将战时物资生产、采购、运输、配给等活动作为一个整体进行统一布置，以求战略物资补给的费用更低、速度更快、服务更好。后来，将“后勤”体系移植到现代经济生活中，才逐步演变为今天的物流。物流系统也可像互联网般，促进全球化。在贸易上，若要更进一步与世界连系，就得靠良好的物流管理系统。</p>
+<p>市场上的商品很多是「游历」各国后才来到的。原料可能来自马来西亚和泰国，加工可能在新加坡，生产却在中国，最后才入口到美国。产品的「游历」路线就是由物流师计划、组织、指挥、协调、控制和监督，使各项物流活动实现最佳的协调与配合，以实现产品物流的目标，目标可能是：降低物流成本（cost），提高物流效率及质量（efficiency &amp; quality），或提高物流的供应满足性（availability）。目标可能会有取舍和侧重。</p>
+<h3 id="logistics-词源">logistics 词源</h3>
+<p>Logistics 是 logistic 的复数名词，从词源关系上看，两者也略有不同。</p>
+<blockquote>
+<ul>
+<li>“art of moving, quartering, and supplying troops,” 1846,</li>
+<li>from French <strong>(l’art)logistique</strong> “(art) of quartering troops,”, which apparently(据说) is
+<ul>
+<li>from <strong>logis</strong> “lodging”
+<ul>
+<li>from Old French <strong>logeiz</strong> “shelter for an army, encampment,” from loge</li>
+</ul>
+</li>
+<li>Greek-derived suffix <strong>-istique</strong> (see -istic).</li>
+</ul>
+</li>
+<li>The form in French was influenced by <strong>logistique</strong>, from the Latin source of English logistic.</li>
+</ul>
+</blockquote>
+<h1>Logistic 分布</h1>
+<p>当我们限定 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>L</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">L = 1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.6833em;"></span><span class="mord mathnormal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> 时, Logistic 函数是一条值域为 <code>(0, 1)</code> 的单调递增 S 曲线. 它实际上是 Logistic 分布的 累积分布函数 (Cumulative Distribution Function, CDF).</p>
+<p>Logistic 分布的 累积分布函数 及 概率密度函数 的数学表达式 和 函数图像吐下:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mtable rowspacing="0.25em" columnalign="right left" columnspacing="0em"><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mi>F</mi><mo stretchy="false">(</mo><mi>x</mi><mo separator="true">;</mo><mi>μ</mi><mo separator="true">,</mo><mi>s</mi><mo stretchy="false">)</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mo stretchy="false">(</mo><mi>x</mi><mo>−</mo><mi>μ</mi><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mi>s</mi></mrow></msup></mrow></mfrac></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mi>f</mi><mo stretchy="false">(</mo><mi>x</mi><mo separator="true">;</mo><mn>0</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><mfrac><msup><mi>e</mi><mrow><mo>−</mo><mi>x</mi></mrow></msup><mrow><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>x</mi></mrow></msup><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow></mfrac></mrow></mstyle></mtd></mtr><mtr><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow></mrow></mstyle></mtd><mtd><mstyle scriptlevel="0" displaystyle="true"><mrow><mrow></mrow><mo>=</mo><mi>F</mi><mo stretchy="false">(</mo><mi>x</mi><mo separator="true">;</mo><mn>0</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">[</mo><mn>1</mn><mo>−</mo><mi>F</mi><mo stretchy="false">(</mo><mi>x</mi><mo separator="true">;</mo><mn>0</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">)</mo><mo stretchy="false">]</mo></mrow></mstyle></mtd></mtr></mtable><annotation encoding="application/x-tex">\begin{aligned}
+F(x; \mu, s) &amp;= \frac{1}{1 + e^{-(x - \mu) / s}} \\
+f(x; 0, 1) &amp;= \frac{e^{-x}}{(1 + e^{-x})^2} \\
+           &amp;= F(x; 0, 1) [1 - F(x; 0, 1)]
+\end{aligned}
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:6.5931em;vertical-align:-3.0466em;"></span><span class="mord"><span class="mtable"><span class="col-align-r"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:3.5466em;"><span style="top:-5.6734em;"><span class="pstrut" style="height:3.4483em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mpunct">;</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">μ</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">s</span><span class="mclose">)</span></span></span><span style="top:-3.1378em;"><span class="pstrut" style="height:3.4483em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.10764em;">f</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mpunct">;</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span><span style="top:-1.0618em;"><span class="pstrut" style="height:3.4483em;"></span><span class="mord"></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:3.0466em;"><span></span></span></span></span></span><span class="col-align-l"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:3.5466em;"><span style="top:-5.6734em;"><span class="pstrut" style="height:3.4483em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.296em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.814em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mopen mtight">(</span><span class="mord mathnormal mtight">x</span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">μ</span><span class="mclose mtight">)</span><span class="mord mtight">/</span><span class="mord mathnormal mtight">s</span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7873em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span><span style="top:-3.1378em;"><span class="pstrut" style="height:3.4483em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4483em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6973em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">x</span></span></span></span></span></span></span></span></span><span class="mclose"><span class="mclose">)</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">x</span></span></span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span><span style="top:-1.0618em;"><span class="pstrut" style="height:3.4483em;"></span><span class="mord"><span class="mord"></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mpunct">;</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mopen">[</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.13889em;">F</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mpunct">;</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">)]</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:3.0466em;"><span></span></span></span></span></span></span></span></span></span></span></span></p>
+<p><img src="/2022/11/24/brief-intro-to-logit/Logistic_cdf.svg.png" alt="累积分布函数" srcset="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20300%20300'%3E%3C/svg%3E" data-src="/2022/11/24/brief-intro-to-logit/Logistic_cdf.svg.png" class="lozad post-image"></p>
+<p><img src="/2022/11/24/brief-intro-to-logit/Logistic_pdf.svg.png" alt="概率密度函数" srcset="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20300%20300'%3E%3C/svg%3E" data-src="/2022/11/24/brief-intro-to-logit/Logistic_pdf.svg.png" class="lozad post-image"></p>
+<p>Logistic 分布的概率密度函数图像与正态分布相似, 但长尾分布更明显.</p>
+<h1>logit</h1>
+<p>从语义上讲, logit 是本文讨论的词语中离 “逻辑” 最远的词；但从字形上看，logit 与 logic 最相似。 我们把它放到最后来讲。</p>
+<p>logit 是 Joseph Berkson 在 1944 年创造的一个词, 它是由 logistic + unit 构成的一个.</p>
+<p>关于定义该术语的理由，作者的原话如下:</p>
+<blockquote>
+<p>“I use this term <strong>logit</strong> for <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mstyle scriptlevel="0" displaystyle="true"><mi>ln</mi><mo>⁡</mo><mi>p</mi><mi mathvariant="normal">/</mi><mi>q</mi></mstyle></mrow><annotation encoding="application/x-tex">\displaystyle \ln p/q</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">ln</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.03588em;">q</span></span></span></span> following Bliss, who called the analogous function which is linear on <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mstyle scriptlevel="0" displaystyle="true"><mi>x</mi></mstyle></mrow><annotation encoding="application/x-tex">\displaystyle x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span> for the normal curve ‘probit.’”</p>
+</blockquote>
+<p>简单而言，logit 是类比 probit 创造出的一个词语. 如果非要给 logit 一个定义</p>
+<ul>
+<li>(mathematics) the logit function is the inverse of the sigmoid (logistic) function.</li>
+</ul>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>logit</mtext><mo stretchy="false">(</mo><mi>p</mi><mo stretchy="false">)</mo><mo>=</mo><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><mfrac><mi>p</mi><mrow><mn>1</mn><mo>−</mo><mi>p</mi></mrow></mfrac><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{logit} (p) = \log (\frac{p}{1-p})
+</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">logit</span></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="base"><span class="strut" style="height:1.988em;vertical-align:-0.8804em;"></span><span class="mop">lo<span style="margin-right:0.01389em;">g</span></span><span class="mopen">(</span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.1076em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">p</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">p</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose">)</span></span></span></span></span></p>
+<p>在统计学上, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mfrac><mi>p</mi><mrow><mn>1</mn><mo>−</mo><mi>p</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\frac{p}{1-p}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="base"><span class="strut" style="height:1.2286em;vertical-align:-0.4811em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.7475em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span><span class="mbin mtight">−</span><span class="mord mathnormal mtight">p</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.4461em;"><span class="pstrut" style="height:3em;"></span><span class="sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">p</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4811em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span> 也有专门的术语表示, 称之为 <strong>odds</strong>, 一般翻译为 “发生比, 胜算, 几率”, 所以 logit 有时也翻译成 <strong>对数比</strong> 或 <strong>对数几率</strong>.</p>
+<blockquote>
+<p><strong>probit</strong><br>
+probit 是 Bliss 在 1934 年的论文 “The method if probits” 中创造的词语, 它有两个含义:</p>
+<ul>
+<li>(statistics) A unit, derived from a standard distribution, used in measuring the response to doses</li>
+<li>The probit function is the inverse of the cumulative distribution function</li>
+</ul>
+<p>probit 有时会翻译成 “概率单位”。在概率与统计学中，概率单位是与标准正态分布相关联的分位函数；在数学上，概率单位是标准正态分布的累积分布函数的反函数。</p>
+</blockquote>
+<h1>总结</h1>
+<p>本文并不讨论 逻辑回归、逻辑函数、逻辑分布 的数学定义、证明、推导等，也不导论 LR 在风控、排序、CTR预估等任务上的应用。我们主要关注这些 ”逻辑“ 概念的来源。</p>
+<p>从本文中你可以了解到：</p>
+<ul>
+<li>”逻辑“ 是一个外来词，是严复先生对英文词 ”logic“ 的音译</li>
+<li>logistic function 是比利时数学家 Verhulst 对一类数学上的S曲线的命名。但是 Verhulst 并没有给出命名的理由，这是我们在 ”逻辑回归“、”逻辑函数“ 中难寻 ”逻辑“ 影踪的重要原因</li>
+</ul>
+
+  </div>
+
+  
+  <div>
+    
+      <div 
+        class="post-note note-warning copyright" 
+        style="margin-top: 42px">
+        <p>
+          <span style="font-weight: bold;">作者：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="/about">
+            深钓大虾
+          </a>
+        </p>
+        <p>
+          <span style="font-weight: bold;">文章链接：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="https://loveychen.github.io/2022/11/24/brief-intro-to-logit/">
+            https://loveychen.github.io/2022/11/24/brief-intro-to-logit/
+          </a>
+        </p>
+        <p><span style="font-weight: bold;">版权声明：</span>本博客所有文章除特别声明外，均采用<a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh">CC BY-NC-SA 4.0 协议</a>。转载请注明出处！</p>
+      </div>
+    
+  </div>
+</article>
+<div class="nav">
+  
+    <div class="nav-item-prev">
+      <a 
+        href="/2025/06/12/Learning-VLLM-serve-model/" 
+        class="nav-link">
+        <i class="iconfont icon-left nav-prev-icon"></i>
+        <div>
+          <div class="nav-label">上一篇</div>
+          
+            <div class="nav-title">VLLM 学习之路(一) - 模型服务 </div>
+          
+        </div>
+      </a>
+    </div>
+  
+  
+    <div class="nav-item-next">
+      <a 
+        href="/2021/06/11/20210611-memory-network-for-ds/" 
+        class="nav-link">
+        <div>
+          <div class="nav-label">下一篇</div>
+          
+            <div class="nav-title">Memory Network 在对话系统中的应用 </div>
+          
+        </div>
+        <i class="iconfont icon-right nav-next-icon"></i>
+      </a>
+    </div>
+  
+</div>
+
+  <div 
+    class="card card-content comment-card" 
+    style="margin-top: 16px;">
+    <div class="comment-card-title">评论</div>
+    
+  <div id="vcomments"></div>
+  
+  <script>
+    loadScript("//unpkg.com/valine@1.4.15/dist/Valine.min.js");
+    var oldLoadVa = window.onload;
+    window.onload = function () {
+      oldLoadVa && oldLoadVa();
+      new Valine({
+        el: '#vcomments',
+        appId: 'LC7p0faybQsaBhYb4lg1yjQd-MdYXbMMI',
+        appKey: 'uu6JdEPv1lLNFqIMvsG0EKOs',
+        placeholder: '请多指教',
+        path: window.location.pathname,
+        avatar: 'mp',
+        meta: ["nick","mail"],
+        pageSize: '10',
+        lang: '',
+        visitor: 'false',
+        highlight: true,
+        recordIP: false,
+        
+        
+        
+        enableQQ: 'false',
+        requiredFields: [],
+      });
+    };
+  </script>
+
+  </div>
+
+<div 
+  class="card card-content toc-card" 
+  id="mobiletoc">
+  <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">逻辑回归中的“逻辑”</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">“逻辑” 词源</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">logic 的含义</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">Logistic 函数</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">logistic 词源探秘: 一些有趣的小知识</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#logistic-%E8%AF%8D%E6%BA%90"><span class="toc-number">5.1.</span> <span class="toc-text">logistic 词源</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#log-%E8%AF%8D%E6%A0%B9"><span class="toc-number">5.2.</span> <span class="toc-text">log- 词根</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Logistics-%E7%89%A9%E6%B5%81-%E5%90%8E%E5%8B%A4"><span class="toc-number">5.3.</span> <span class="toc-text">Logistics, 物流 &#x2F; 后勤</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%80%9C%E7%89%A9%E6%B5%81%E2%80%9D-%E4%B8%AD%E7%9A%84-%E2%80%9C%E9%80%BB%E8%BE%91%E2%80%9D"><span class="toc-number">5.3.1.</span> <span class="toc-text">“物流” 中的 “逻辑”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#logistics-%E8%AF%8D%E6%BA%90"><span class="toc-number">5.3.2.</span> <span class="toc-text">logistics 词源</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">Logistic 分布</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">7.</span> <span class="toc-text">logit</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">8.</span> <span class="toc-text">总结</span></a></li></ol>
+</div>
+
+            </main>
+            
+            <!-- Right sidebar -->
+            <aside class="right-column" id="right-sidebar">
+              <div class="sticky-widescreen">
+  
+  
+    <article class="card card-content toc-card">
+      <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">逻辑回归中的“逻辑”</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">“逻辑” 词源</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">logic 的含义</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">4.</span> <span class="toc-text">Logistic 函数</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">5.</span> <span class="toc-text">logistic 词源探秘: 一些有趣的小知识</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#logistic-%E8%AF%8D%E6%BA%90"><span class="toc-number">5.1.</span> <span class="toc-text">logistic 词源</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#log-%E8%AF%8D%E6%A0%B9"><span class="toc-number">5.2.</span> <span class="toc-text">log- 词根</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Logistics-%E7%89%A9%E6%B5%81-%E5%90%8E%E5%8B%A4"><span class="toc-number">5.3.</span> <span class="toc-text">Logistics, 物流 &#x2F; 后勤</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E2%80%9C%E7%89%A9%E6%B5%81%E2%80%9D-%E4%B8%AD%E7%9A%84-%E2%80%9C%E9%80%BB%E8%BE%91%E2%80%9D"><span class="toc-number">5.3.1.</span> <span class="toc-text">“物流” 中的 “逻辑”</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#logistics-%E8%AF%8D%E6%BA%90"><span class="toc-number">5.3.2.</span> <span class="toc-text">logistics 词源</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">6.</span> <span class="toc-text">Logistic 分布</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">7.</span> <span class="toc-text">logit</span></a></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">8.</span> <span class="toc-text">总结</span></a></li></ol>
+    </article>
+  
+  
+  <article class="card card-content">
+    <div class="recent-posts-card">
+  <div class="recent-posts-header">
+    <i 
+      class="iconfont icon-wenzhang_huaban" 
+      style="padding-right: 2px;">
+    </i>最近文章
+  </div>
+  <div class="recent-posts-list">
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-08-05</div>
+        <a href="/2025/08/05/LangChain-Memory-Comparison/"><div class="recent-posts-item-content">LangChain Memory 类型详细对比分析</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-06-12</div>
+        <a href="/2025/06/12/Learning-VLLM-serve-model/"><div class="recent-posts-item-content">VLLM 学习之路(一) - 模型服务</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2022-11-24</div>
+        <a href="/2022/11/24/brief-intro-to-logit/"><div class="recent-posts-item-content">从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2021-06-11</div>
+        <a href="/2021/06/11/20210611-memory-network-for-ds/"><div class="recent-posts-item-content">Memory Network 在对话系统中的应用</div></a>
+      </div>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <!-- Right sidebar toggle button -->
+            <button class="sidebar-toggle right-toggle" id="right-sidebar-toggle">
+              <span>点击查看目录</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+     
+    <footer class="footer">
+  <div class="footer-container">
+    <div>
+      <div class="footer-dsc">
+        <span>
+          Copyright ©
+          
+            2020
+          
+          
+                - 
+                2025
+          
+        </span>
+        &nbsp;
+        <a 
+          href="/" 
+          class="footer-link">
+          
+        </a>
+      </div>
+    </div>
+
+    
+      <div class="footer-dsc">
+        
+          Powered by
+          <a 
+            href="https://hexo.io/" 
+            class="footer-link" 
+            target="_blank" 
+            rel="nofollow noopener noreferrer">
+            &nbsp;Hexo
+          </a>
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          Theme -
+          <a 
+            href="https://github.com/theme-kaze" 
+            class="footer-link" 
+            target="_blank"
+            rel="nofollow noopener noreferrer">
+            &nbsp;Kaze
+          </a>
+        
+      </div>
+    
+    
+    
+    
+      <div class="footer-dsc">
+        
+          本站总访问量<span id="busuanzi_value_site_pv"></span>次
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          本站总访客数<span id="busuanzi_value_site_uv"></span>次
+        
+      </div>
+      
+    
+</footer>
+ 
+    
+  <a 
+    role="button" 
+    id="scrollbutton" 
+    class="basebutton" 
+    aria-label="回到顶部">
+    <i class="iconfont icon-arrowleft button-icon"></i>
+  </a>
+
+<a 
+  role="button" 
+  id="menubutton"
+  aria-label="menu button"
+  class="basebutton">
+  <i class="iconfont icon-menu button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="popbutton" 
+  class="basebutton" 
+  aria-label="控制中心">
+  <i class="iconfont icon-expand button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="darkbutton" 
+  class="basebutton darkwidget" 
+  aria-label="夜色模式">
+  <i class="iconfont icon-weather button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="searchbutton" 
+  class="basebutton searchwidget" 
+  aria-label="搜索">
+  <i class="iconfont icon-search button-icon"></i>
+</a> 
+     
+     
+      
+
+  
+  
+    
+<link rel="stylesheet" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css">
+
+  
+ 
+     
+     
+      <script>
+  var addImgLayout = function () {
+    var img = document.querySelectorAll('.post-content img')
+    var i
+    for (i = 0; i < img.length; i++) {
+      var wrapper = document.createElement('a')
+      wrapper.setAttribute('href', img[i].getAttribute('data-src'))
+      wrapper.setAttribute('aria-label', 'illustration')
+      wrapper.style.cssText =
+        'width: 100%; display: flex; justify-content: center;'
+      if (img[i].alt) wrapper.dataset.caption = img[i].alt
+      wrapper.dataset.nolink = true
+      img[i].before(wrapper)
+      wrapper.append(img[i])
+      var divWrap = document.createElement('div')
+      divWrap.classList.add('gallery')
+      wrapper.before(divWrap)
+      divWrap.append(wrapper)
+    }
+    baguetteBox.run('.gallery')
+  }
+</script>
+<script>
+  loadScript(
+    "/js/lib/lightbox/baguetteBox.min.js",
+    addImgLayout
+  )
+</script>
+ 
+     
+     
+    <script src="/js/main.js"></script> 
+    
+      <script> 
+        loadScript('/js/lib/busuanzi.min.js') 
+      </script>
+     
+    
+      <script>
+        var addLazyload = function () {
+          var observer = lozad('.lozad', {
+            load: function (el) {
+              el.srcset = el.getAttribute('data-src')
+            },
+            loaded: function (el) {
+              el.classList.add('loaded')
+            },
+          })
+          observer.observe()
+        }
+      </script>
+      <script>
+        loadScript('/js/lib/lozad.min.js', addLazyload)
+      </script>
+    
+    <script src="//instant.page/5.1.0" type="module"
+      integrity="sha384-by67kQnR+pyfy8yWP4kPO12fHKRLHZPfEsiSXR8u2IKcTdxD805MGUXBzVPnkLHw"></script>
+    
+    
+    
+    <!-- Sidebar toggle script -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const leftToggle = document.getElementById('left-sidebar-toggle');
+        const rightToggle = document.getElementById('right-sidebar-toggle');
+        const leftSidebar = document.getElementById('left-sidebar');
+        const rightSidebar = document.getElementById('right-sidebar');
+        
+        // Load saved states from localStorage
+        const leftSidebarState = localStorage.getItem('left-sidebar-state') || 'closed';
+        const rightSidebarState = localStorage.getItem('right-sidebar-state') || 'open';
+        
+        // Apply initial states
+        if (leftSidebarState === 'open') {
+          leftSidebar.classList.add('expanded');
+        }
+        
+        // 右边栏默认展开
+        if (rightSidebarState === 'open' || !rightSidebarState) {
+          rightSidebar.classList.add('expanded');
+        }
+        
+        // Toggle left sidebar
+        leftToggle.addEventListener('click', function() {
+          leftSidebar.classList.toggle('expanded');
+          if (leftSidebar.classList.contains('expanded')) {
+            localStorage.setItem('left-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+        });
+        
+        // Toggle right sidebar
+        rightToggle.addEventListener('click', function() {
+          rightSidebar.classList.toggle('expanded');
+          if (rightSidebar.classList.contains('expanded')) {
+            localStorage.setItem('right-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+        
+        // Close sidebars when clicking outside
+        document.addEventListener('click', function(event) {
+          // Close left sidebar when clicking outside of it
+          if (leftSidebar.classList.contains('expanded') && 
+              !leftSidebar.contains(event.target) && 
+              !leftToggle.contains(event.target)) {
+            leftSidebar.classList.remove('expanded');
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+          
+          // Close right sidebar when clicking outside of it
+          if (rightSidebar.classList.contains('expanded') && 
+              !rightSidebar.contains(event.target) && 
+              !rightToggle.contains(event.target)) {
+            rightSidebar.classList.remove('expanded');
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

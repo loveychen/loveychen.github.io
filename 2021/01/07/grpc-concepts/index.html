@@ -1,0 +1,1797 @@
+<!DOCTYPE html>
+<html lang="zh-CN,zh-TW,en,default">
+  <head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, minimum-scale=1.0"
+  />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+  <meta name="theme-color" content="#fff" id="theme-color" />
+  <meta
+    name="description"
+    content="胖子叔叔的博客屋"
+  />
+  <link rel="icon" href="/img/avantar.jpg" />
+  <title>gRPC 源码解析</title>
+   
+  <meta
+    property="og:title"
+    content="gRPC 源码解析"
+  />
+   
+  <meta property="og:url" content="https://loveychen.github.io/2021/01/07/grpc-concepts/index.html" />
+   
+  <meta
+    property="og:img"
+    content="/img/avantar.jpg"
+  />
+    
+  <meta property="og:type" content="article" />
+  <meta property="og:article:published_time" content="2021-01-08" />
+  <meta
+    property="og:article:modified_time"
+    content="2025-08-06"
+  />
+  <meta
+    property="og:article:author"
+    content="深钓大虾"
+  />
+   
+  <meta property="og:article:tag" content="gRPC" />
+  
+  <meta property="og:article:tag" content="源码解析" />
+       <link rel="preload" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css" as="style" > <link rel="preload" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css" as="style" > <link rel="preload" href="/css/main.css" as="style" > 
+  <link rel="modulepreload" href="//instant.page/5.1.0" />
+   <link rel="stylesheet" href="/css/main.css">  <link rel="stylesheet" href="//at.alicdn.com/t/font_1946621_i1kgafibvw.css"> 
+  <link rel="stylesheet" href="//at.alicdn.com/t/font_1952792_89b4ac4k4up.css">    <link rel="stylesheet" href="/js/lib/lightbox/baguetteBox.min.css"> 
+
+  <script>
+    // 主题配置
+    const themeConfig = {
+      dark: {
+        colorScheme: "dark",
+        themeColor: "#1c1c1e",
+      },
+      light: {
+        colorScheme: "light",
+        themeColor: "#ffffff",
+      },
+    };
+
+    // 获取当前颜色方案
+    function getCurrentColorScheme() {
+      const userSetting = localStorage.getItem("user-color-scheme");
+      if (userSetting) {
+        return themeConfig[userSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      const pageSetting = document.documentElement.getAttribute(
+        "data-user-color-scheme"
+      );
+      if (pageSetting) {
+        return themeConfig[pageSetting] || themeConfig[getSystemColorScheme()];
+      }
+
+      return getSystemColorScheme();
+    }
+
+    // 获取系统颜色方案
+    function getSystemColorScheme() {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    }
+
+    // 设置主题
+    function setTheme(mode) {
+      const theme = mode || getCurrentColorScheme();
+      document.documentElement.setAttribute(
+        "data-user-color-scheme",
+        themeConfig[theme].colorScheme
+      );
+      document.getElementById("theme-color").content =
+        themeConfig[theme].themeColor;
+      document.getElementById("theme-color").dataset.mode = theme;
+
+      // 更新 Mermaid 图表
+      if (typeof mermaid !== "undefined") {
+        const mermaidTheme = theme === "dark" ? "dark" : "default";
+        if (mermaid.getTheme() !== mermaidTheme) {
+          mermaid.initialize(
+            Object.assign({}, mermaidConfig, { theme: mermaidTheme })
+          );
+          mermaid.contentLoaded();
+        }
+      }
+
+      // 更新 Prism 主题
+      if (typeof prismThemeChange === "function") {
+        prismThemeChange();
+      }
+    }
+
+    // 初始化主题
+    setTheme();
+
+    // 监听系统主题变化
+    window
+      .matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", () => {
+        setTheme(getSystemColorScheme());
+      });
+
+    // 监听页面主题类变化
+    const observer = new MutationObserver(() => {
+      setTheme();
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-user-color-scheme", "class"],
+    });
+  </script>
+
+  <script>
+    function loadScript(url, cb) {
+      var script = document.createElement("script");
+      script.src = url;
+      if (cb) script.onload = cb;
+      script.async = true;
+      document.body.appendChild(script);
+    }
+    function loadCSS(href, data, attr) {
+      var sheet = document.createElement("link");
+      sheet.rel = "stylesheet";
+      sheet.href = href;
+      sheet.dataset[data] = attr;
+      document.head.appendChild(sheet);
+    }
+    function changeCSS(cssFile, data, attr) {
+      var oldlink = document.querySelector("[data-prism]");
+      var newlink = document.createElement("link");
+      newlink.setAttribute("rel", "stylesheet");
+      newlink.setAttribute("href", cssFile);
+      newlink.dataset.prism = attr;
+      document.head.replaceChild(newlink, oldlink);
+    }
+  </script>
+    
+  <script>
+    // control reverse button
+    var reverseDarkList = {
+      dark: "light",
+      light: "dark",
+    };
+    var themeColor = {
+      dark: "#1c1c1e",
+      light: "#fff",
+    };
+    // get the data of css prefers-color-scheme
+    var getCssMediaQuery = function () {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+    // reverse current darkmode setting function
+    var reverseDarkModeSetting = function () {
+      var setting = localStorage.getItem("user-color-scheme");
+      if (reverseDarkList[setting]) {
+        setting = reverseDarkList[setting];
+      } else if (setting === null) {
+        setting = reverseDarkList[getCssMediaQuery()];
+      } else {
+        return;
+      }
+      localStorage.setItem("user-color-scheme", setting);
+      return setting;
+    };
+    // apply current darkmode setting
+  </script>
+  
+  <script>
+    var setDarkmode = function (mode) {
+      var setting = mode || localStorage.getItem("user-color-scheme");
+      if (setting === getCssMediaQuery()) {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else if (reverseDarkList[setting]) {
+        document.documentElement.setAttribute(
+          "data-user-color-scheme",
+          setting
+        );
+        document.getElementById("theme-color").content = themeColor[setting];
+        document.getElementById("theme-color").dataset.mode = setting;
+      } else {
+        document.documentElement.removeAttribute("data-user-color-scheme");
+        localStorage.removeItem("user-color-scheme");
+        document.getElementById("theme-color").content =
+          themeColor[getCssMediaQuery()];
+        document.getElementById("theme-color").dataset.mode =
+          getCssMediaQuery();
+      }
+    };
+    setDarkmode();
+  </script>
+
+  <!-- 推荐使用 CDN，指定具体版本避免兼容性问题 -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+
+  <!-- 初始化 Mermaid（若插件未自动初始化） -->
+  <script>
+    // 确保脚本加载完成后初始化
+    window.onload = function () {
+      if (window.mermaid) {
+        mermaid.initialize({
+          theme: "base",
+          startOnLoad: true, // 自动渲染页面中的图表
+          securityLevel: "loose", // 允许更多语法（可选）
+        });
+      }
+    };
+  </script>
+
+     <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.js" as="script"> <link rel="preload" href="/js/lib/lightbox/baguetteBox.min.css" as="style" >   <link rel="preload" href="/js/lib/lozad.min.js" as="script">    
+   <link rel="prefetch" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css" as="script">
+     <link rel="prefetch" href="//unpkg.com/valine@1.4.15/dist/Valine.min.js" as="script">  
+<!-- hexo injector head_end start --><style>
+@media (prefers-color-scheme: dark) {
+  .shiki,
+  .shiki span {
+    color: var(--shiki-dark) !important;
+    background-color: var(--shiki-dark-bg) !important;
+    font-style: var(--shiki-dark-font-style) !important;
+    font-weight: var(--shiki-dark-font-weight) !important;
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
+}
+    </style><!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"><link rel="alternate" href="/atom.xml" title="胖子叔叔的博客屋" type="application/atom+xml">
+</head>
+
+  <body>
+    <div class="wrapper">
+       
+      <nav class="navbar">
+
+  <div class="navbar-logo">
+    <a class="navbar-logo-main" href="/">
+      
+        <img 
+          class="navbar-logo-img"
+          width="32"
+          height="32"
+          src="/img/avantar.jpg" 
+          alt="blog logo">
+      
+      <span class="navbar-logo-dsc">胖子叔叔的博客屋</span>
+      </a>
+  </div>
+
+  <div class="navbar-menu">
+    
+      <a 
+        href="/" 
+        class="navbar-menu-item">
+        
+          首页
+        
+      </a>
+    
+      <a 
+        href="/archives" 
+        class="navbar-menu-item">
+        
+          归档
+        
+      </a>
+    
+      <a 
+        href="/tags" 
+        class="navbar-menu-item">
+        
+          标签
+        
+      </a>
+    
+      <a 
+        href="/categories" 
+        class="navbar-menu-item">
+        
+          分类
+        
+      </a>
+    
+      <a 
+        href="/about" 
+        class="navbar-menu-item">
+        
+          关于我
+        
+      </a>
+    
+      <a 
+        href="/shuoshuo" 
+        class="navbar-menu-item">
+        
+          留言板
+        
+      </a>
+    
+    <button 
+      class="navbar-menu-item darknavbar navbar-menu-btn" 
+      aria-label="Toggle dark mode"
+      id="dark">
+      <i class="iconfont icon-weather"></i>
+    </button>
+    <button 
+      class="navbar-menu-item searchnavbar navbar-menu-btn" 
+      aria-label="Toggle search"
+      id="search">
+      <!-- <i 
+        class="iconfont icon-search" 
+        style="font-size: 1.2rem; font-weight: 400;">
+      </i> -->
+      <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img"
+        class="iconify iconify--ion" width="28" height="28" preserveAspectRatio="xMidYMid meet" viewBox="0 0 512 512">
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M256 80a176 176 0 1 0 176 176A176 176 0 0 0 256 80Z"></path>
+        <path fill="none" stroke="currentColor" stroke-miterlimit="10" stroke-width="28"
+          d="M232 160a72 72 0 1 0 72 72a72 72 0 0 0-72-72Z"></path>
+        <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-miterlimit="10" stroke-width="28"
+          d="M283.64 283.64L336 336"></path>
+      </svg>
+    </button>
+  </div>
+</nav>
+ 
+      
+      <div 
+        id="local-search" 
+        style="display: none">
+        <input
+          class="navbar-menu-item"
+          id="search-input"
+          placeholder="请输入搜索内容..." />
+        <div id="search-content"></div>
+      </div>
+      
+      <div class="section-wrap">
+        <div class="container">
+          <div class="columns">
+            <!-- Left sidebar toggle button -->
+            <button class="sidebar-toggle left-toggle" id="left-sidebar-toggle">
+              <span>点击查看分类和标签</span>
+            </button>
+            
+            <!-- Left sidebar -->
+            <aside class="left-column" id="left-sidebar">
+              
+              <div class="card card-author">
+                
+  <img 
+    src="/img/avantar.jpg" 
+    class="author-img"
+    width="88"
+    height="88"
+    alt="author avatar">
+
+<p class="author-name">深钓大虾</p>
+<p class="author-description">NLP 算法专家</p>
+<div class="author-message">
+  <a 
+    class="author-posts-count" 
+    href="/archives">
+    <span>8</span>
+    <span>文章</span>
+  </a>
+  <a 
+    class="author-categories-count" 
+    href="/categories">
+    <span>6</span>
+    <span>分类</span>
+  </a>
+  <a 
+    class="author-tags-count" 
+    href="/tags">
+    <span>20</span>
+    <span>标签</span>
+  </a>
+</div>
+
+  <div class="author-card-society">
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://github.com/loveychen">
+          <i class="iconfont icon-github society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a href="mailto:loveycd1989@.gmail.com">
+          <i class="iconfont icon-mail society-icon"></i>
+        </a>
+      </div>
+    
+      <div class="author-card-society-icon">
+        <a target="_blank" rel="noopener" href="https://www.linkedin.com/in/%E9%9B%95-%E9%99%88-11a958146/">
+          <i class="iconfont icon-linkedin society-icon"></i>
+        </a>
+      </div>
+    
+  </div>
+
+              </div>
+               <div class="sticky-tablet">
+  
+  
+    <article class="display-when-two-columns spacer">
+      <div class="card card-content toc-card">
+        <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">通用概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8B%A6%E6%88%AA%E5%99%A8-Interceptor"><span class="toc-number">1.1.</span> <span class="toc-text">拦截器 Interceptor</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="toc-number">1.1.1.</span> <span class="toc-text">服务端拦截器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="toc-number">1.1.2.</span> <span class="toc-text">客户端拦截器</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%8A%E4%B8%8B%E6%96%87-Context"><span class="toc-number">1.2.</span> <span class="toc-text">上下文 Context</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%85%B1%E4%BA%AB-Context"><span class="toc-number">1.2.1.</span> <span class="toc-text">共享 Context</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF-Context"><span class="toc-number">1.2.2.</span> <span class="toc-text">服务端 Context</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF-Context"><span class="toc-number">1.2.3.</span> <span class="toc-text">客户端 Context</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">服务端概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF-Server"><span class="toc-number">2.1.</span> <span class="toc-text">服务端 Server</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9B%E5%BB%BA%E6%9C%8D%E5%8A%A1-grpc-server"><span class="toc-number">2.1.1.</span> <span class="toc-text">创建服务 grpc.server()</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Server-%E6%8E%A5%E5%8F%A3-grpc-Server"><span class="toc-number">2.1.2.</span> <span class="toc-text">Server 接口 grpc.Server</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Cython-%E5%AE%9E%E7%8E%B0-cygrpc-Server"><span class="toc-number">2.1.3.</span> <span class="toc-text">Cython 实现 cygrpc.Server</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#CPP-%E5%AE%9E%E7%8E%B0-grpc-server-%E4%B8%8E-grpc-core-Server"><span class="toc-number">2.1.4.</span> <span class="toc-text">CPP 实现 grpc_server 与 grpc_core::Server</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1-Servicer"><span class="toc-number">2.2.</span> <span class="toc-text">服务 Servicer</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3-Handler"><span class="toc-number">2.3.</span> <span class="toc-text">接口 Handler</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%96%B9%E6%B3%95-Handler"><span class="toc-number">2.3.1.</span> <span class="toc-text">方法 Handler</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1-Handler"><span class="toc-number">2.3.2.</span> <span class="toc-text">服务 Handler</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8-2"><span class="toc-number">2.4.</span> <span class="toc-text">服务端拦截器</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="toc-number">2.5.</span> <span class="toc-text">服务端上下文</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">客户端概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF-Stub"><span class="toc-number">3.1.</span> <span class="toc-text">客户端 Stub</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Channel"><span class="toc-number">3.2.</span> <span class="toc-text">Channel</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9B%E5%BB%BA-Channel"><span class="toc-number">3.2.1.</span> <span class="toc-text">创建 Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3%E5%AE%9A%E4%B9%89-grpc-Channel"><span class="toc-number">3.2.2.</span> <span class="toc-text">接口定义 grpc.Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3%E5%AE%9E%E7%8E%B0-grpc-channel-Channel"><span class="toc-number">3.2.3.</span> <span class="toc-text">接口实现 grpc._channel.Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Channel-%E7%9A%84%E7%8A%B6%E6%80%81"><span class="toc-number">3.2.4.</span> <span class="toc-text">Channel 的状态</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Callable"><span class="toc-number">3.3.</span> <span class="toc-text">Callable</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3-grpc-StreamStreamMultiCallable"><span class="toc-number">3.3.1.</span> <span class="toc-text">接口: grpc.StreamStreamMultiCallable</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%9E%E7%8E%B0-grpc-channel-StreamStreamMultiCallable"><span class="toc-number">3.3.2.</span> <span class="toc-text">实现: grpc._channel._StreamStreamMultiCallable</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8-2"><span class="toc-number">3.4.</span> <span class="toc-text">客户端拦截器</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="toc-number">3.5.</span> <span class="toc-text">客户端上下文</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%BC%82%E6%AD%A5%E8%B0%83%E7%94%A8%E7%BB%93%E6%9E%9C-Future"><span class="toc-number">3.6.</span> <span class="toc-text">异步调用结果 Future</span></a></li></ol></li></ol>
+      </div>
+    </article>
+  
+  
+  <article class="card card-content categories-widget">
+    <div class="categories-card">
+  <div class="categories-header">
+    <i 
+      class="iconfont icon-fenlei" 
+      style="padding-right: 2px;">
+    </i>分类
+  </div>
+  <div class="categories-list">
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/">
+        <div class="categories-list-item">
+          对话系统
+          <span class="categories-list-item-badge">4</span>
+        </div>
+      </a>
+    
+      <a href="/categories/LLM-Agent/">
+        <div class="categories-list-item">
+          LLM-Agent
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/">
+        <div class="categories-list-item">
+          Mathematics
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84/">
+        <div class="categories-list-item">
+          系统架构
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+      <a href="/categories/%E5%AF%B9%E8%AF%9D%E7%B3%BB%E7%BB%9F/ConvLab2/">
+        <div class="categories-list-item">
+          对话系统/ConvLab2
+          <span class="categories-list-item-badge">3</span>
+        </div>
+      </a>
+    
+      <a href="/categories/Mathematics/Probability/">
+        <div class="categories-list-item">
+          Mathematics/Probability
+          <span class="categories-list-item-badge">1</span>
+        </div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  <article class="card card-content tags-widget">
+    <div class="tags-card">
+  <div class="tags-header">
+    <i 
+      class="iconfont icon-biaoqian" 
+      style="padding-right: 2px;">
+    </i>热门标签
+  </div>
+  <div class="tags-list">
+    
+      <a 
+        href="/tags/ConvLab2/" 
+        title="ConvLab2">
+        <div class="tags-list-item">ConvLab2</div>
+      </a>
+    
+      <a 
+        href="/tags/TOD/" 
+        title="TOD">
+        <div class="tags-list-item">TOD</div>
+      </a>
+    
+      <a 
+        href="/tags/User-Simulator/" 
+        title="User Simulator">
+        <div class="tags-list-item">User Simulator</div>
+      </a>
+    
+      <a 
+        href="/tags/HUS/" 
+        title="HUS">
+        <div class="tags-list-item">HUS</div>
+      </a>
+    
+      <a 
+        href="/tags/Agenda/" 
+        title="Agenda">
+        <div class="tags-list-item">Agenda</div>
+      </a>
+    
+      <a 
+        href="/tags/TRADE/" 
+        title="TRADE">
+        <div class="tags-list-item">TRADE</div>
+      </a>
+    
+      <a 
+        href="/tags/DST/" 
+        title="DST">
+        <div class="tags-list-item">DST</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/" 
+        title="源码解析">
+        <div class="tags-list-item">源码解析</div>
+      </a>
+    
+      <a 
+        href="/tags/gRPC/" 
+        title="gRPC">
+        <div class="tags-list-item">gRPC</div>
+      </a>
+    
+      <a 
+        href="/tags/%E6%A6%82%E7%8E%87%E8%AE%BA/" 
+        title="概率论">
+        <div class="tags-list-item">概率论</div>
+      </a>
+    
+      <a 
+        href="/tags/logit/" 
+        title="logit">
+        <div class="tags-list-item">logit</div>
+      </a>
+    
+      <a 
+        href="/tags/Mathematics/" 
+        title="Mathematics">
+        <div class="tags-list-item">Mathematics</div>
+      </a>
+    
+      <a 
+        href="/tags/Probability/" 
+        title="Probability">
+        <div class="tags-list-item">Probability</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Inference/" 
+        title="LLM Inference">
+        <div class="tags-list-item">LLM Inference</div>
+      </a>
+    
+      <a 
+        href="/tags/VLLM/" 
+        title="VLLM">
+        <div class="tags-list-item">VLLM</div>
+      </a>
+    
+      <a 
+        href="/tags/LLM-Memory/" 
+        title="LLM Memory">
+        <div class="tags-list-item">LLM Memory</div>
+      </a>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <main class="main-column">
+              
+
+
+<article class="card card-content">
+  <header>
+    <h1 class="post-title">
+      gRPC 源码解析
+    </h1>
+  </header>
+  
+  
+  <div class="post-meta post-show-meta">
+    <time datetime="2021-01-07T20:07:49.000Z">
+      <i 
+        class="iconfont icon-calendar" 
+        style="margin-right: 2px;">
+      </i>
+      <span>2021-01-08</span>
+    </time>
+    
+      <span class="dot"></span>
+      
+        <a 
+          href="/categories/%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84/" 
+          class="post-meta-link">
+          系统架构
+        </a>
+      
+    
+    
+      <span class="dot"></span>
+      <span>4.1k 字</span>
+    
+  </div>
+
+
+  
+    <div 
+      class="post-meta post-show-meta" 
+      style="margin-top: -10px;">
+      <div style="display: flex; align-items: center;">
+        <i 
+          class="iconfont icon-biaoqian" 
+          style="margin-right: 2px; font-size: 1.15rem;">
+        </i>
+        
+          
+          <a 
+            href="/tags/gRPC/" 
+            class="post-meta-link">
+            gRPC
+          </a>
+        
+          
+            <span class="dot"></span>
+          
+          <a 
+            href="/tags/%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90/" 
+            class="post-meta-link">
+            源码解析
+          </a>
+        
+      </div>
+    </div>
+  
+  </header>
+  <div 
+    id="section" 
+    class="post-content">
+    <h1>通用概念</h1>
+<p>gRPC 中, 有部分概念在服务端和客户端由类似的定义, 比如:</p>
+<ul>
+<li>拦截器 Interceptor</li>
+<li>上下文 Context</li>
+</ul>
+<h2 id="拦截器-Interceptor">拦截器 Interceptor</h2>
+<p>拦截器是在各种网络框架中经常使用的概念, 主要用于对网络请求进行前置和后置操作.</p>
+<p>gRPC 的客户端和服务端都有自己的拦截器.</p>
+<h3 id="服务端拦截器">服务端拦截器</h3>
+<p>请参考 <a href="">服务端概念-&gt;服务端拦截器</a></p>
+<h3 id="客户端拦截器">客户端拦截器</h3>
+<p>请参考 <a href="">客户端概念-&gt;客户端拦截器</a></p>
+<h2 id="上下文-Context">上下文 Context</h2>
+<p>gRPC 提供了三种类型的 Context:</p>
+<ul>
+<li>共享 Context <code>grpc.RpcContext</code></li>
+<li>服务端 Context <code>grpc.ServicerContext</code></li>
+<li>客户端 Context <code>grpc.Call</code></li>
+</ul>
+<h3 id="共享-Context">共享 Context</h3>
+<p>共享 Context 接口定义为 <code>grpc.RpcContext</code> , 该接口定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> RpcContext</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> is_active</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> time_remaining</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> cancel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> add_callback</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> callback):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<p>服务端上下文 <code>grpc.ServicerContext</code>和客户端上下文 <code>grpc.Call</code> 均为该类的子类.</p>
+<h3 id="服务端-Context">服务端 Context</h3>
+<p>请参考 <a href="">服务端概念-&gt;服务端上下文</a></p>
+<h3 id="客户端-Context">客户端 Context</h3>
+<p>请参考 <a href="">客户端概念-&gt;客户端上下文</a></p>
+<h1>服务端概念</h1>
+<p>服务端的基本概念有:</p>
+<ul>
+<li>服务端 Server</li>
+<li>服务 Servicer</li>
+<li>接口 Handler</li>
+<li>服务拦截器 Interceptor</li>
+<li><code>ServicerContext</code></li>
+</ul>
+<h2 id="服务端-Server">服务端 Server</h2>
+<h3 id="创建服务-grpc-server">创建服务 <code>grpc.server()</code></h3>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># grpc/__init__.py</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> server</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	thread_pool:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> futures</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">ThreadPoolExecutor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	handlers:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> List</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#8DA101;--shiki-dark:#A7C080">GenericRpcHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">]</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	interceptors:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> List</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#8DA101;--shiki-dark:#A7C080">ServerInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">]</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	options:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> list</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">tuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">]</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	maximum_concurrent_rpcs:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> int</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	compression:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Compression </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    """Creates a Server with which RPCs can be serviced.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    Args:</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      thread_pool: A futures.ThreadPoolExecutor to be used by the Server</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        to execute RPC handlers.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      handlers: An optional list of GenericRpcHandlers used for executing RPCs.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        More handlers may be added by calling add_generic_rpc_handlers any time</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        before the server is started.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      interceptors: An optional list of ServerInterceptor objects that observe</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        and optionally manipulate the incoming RPCs before handing them over to</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        handlers. The interceptors are given control in the order they are</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        specified. This is an EXPERIMENTAL API.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      options: An optional list of key-value pairs (:term:`channel_arguments` in gRPC runtime)</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        to configure the channel.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      maximum_concurrent_rpcs: The maximum number of concurrent RPCs this server</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        will service before returning RESOURCE_EXHAUSTED status, or None to</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        indicate no limit.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      compression: An element of grpc.compression, e.g.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        grpc.compression.Gzip. This compression algorithm will be used for the</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        lifetime of the server unless overridden. This is an EXPERIMENTAL option.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    Returns:</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      A Server object.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    """</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    pass</span></span></code></pre>
+<h3 id="Server-接口-grpc-Server">Server 接口 <code>grpc.Server</code></h3>
+<p><code>grpc.Server</code> 抽象类定义如下</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> Server</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> add_generic_rpc_handlers</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> generic_rpc_handlers):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> add_insecure_port</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> address):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> add_secure_port</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> address,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> server_credentials):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> start</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> stop</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> grace):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> wait_for_termination</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> timeout</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<h3 id="Cython-实现-cygrpc-Server">Cython 实现 <code>cygrpc.Server</code></h3>
+<p>其具体实现在 <code>src/python/grpcio/grpc/_server.py#_Server</code> 中. 而 <code>_Server</code> 类则调用了<code>src/python/grpcio/grpc/_cython/_cygrpc/server.pyx.pxi</code> 中使用 <a target="_blank" rel="noopener" href="https://cython.org/">Cython</a> 实现的 <code>cygrpc.Server</code> 类.</p>
+<p><code>cygrpc.Server</code> 的初始化函数定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">  def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __cinit__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#8DA101;--shiki-dark:#A7C080"> object </span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">arguments):</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">    fork_handlers_and_grpc_init</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">references </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> []</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">registered_completion_queues </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> []</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">is_started </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> False</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">is_shutting_down </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> False</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">is_shutdown </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> False</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">c_server </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> NULL</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    cdef _ChannelArgs channel_args </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _ChannelArgs</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(arguments)</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">c_server </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc_server_create</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(channel_args</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">c_args</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(), NULL)</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">references</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">append</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(arguments)</span></span></code></pre>
+<h3 id="CPP-实现-grpc-server-与-grpc-core-Server">CPP 实现 <code>grpc_server</code> 与 <code>grpc_core::Server</code></h3>
+<p><code>cython.Server</code> 调用 C 函数 <code>grpc_server_create</code> 创建了 <code>grpc_server</code>, <code>grpc_server</code> 是对 <code>grpc_core::Server</code> 的封装, 后者是 gRPC 中 server 的最终实现.</p>
+<p><code>grpc_server_create</code> 函数在 <code>include/grpc/grpc.h</code> 中声明, 在 <code>src/core/lib/surface/server.cc</code> 文件实现.</p>
+<p><code>grpc_server</code> 则定义在 <code>src/core/lib/surface/server.h</code> 文件中.</p>
+<p><code>grpc_core::Server</code> 在 <code>src/core/lib/surface/server.h</code> 定义, 大部分成员函数在 <code>src/core/lib/surface/server.cc</code> 中实现.</p>
+<h2 id="服务-Servicer">服务 Servicer</h2>
+<p>当我们编译 <code>.proto</code> 文件时, <code>grpcio_tools.protoc</code> 中的 gRPC 编译器扩展会基于 <code>.proto</code> 中的 <code>service</code> 定义自动生成 <code>XXXServicer</code> 抽象类 以及对应的辅助函数 <code>add_XXXServicer_to_server(servicer: XXXServicer, server: grpc.Server)</code>.</p>
+<p><code>XXXServicer</code> 与 <code>.proto</code> 中的 <code>service</code> 定义一致, 我们重点关注其中的接口函数.</p>
+<p>以较为复杂的双向流接口为例:</p>
+<p><code>.proto</code> 文件中定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">// 文件名 examples/protos/route_guide.proto</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">service</span><span style="color:#35A77C;--shiki-dark:#83C092"> examples</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">/python/route_guide/route_guide_pb2_grpc.py &#123;</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">  // 省略其它内容</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">  // A Bidirectional streaming RPC.</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">  //</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">  // Accepts a stream of RouteNotes sent while a route is being traversed,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">  // while receiving other RouteNotes (e.g. from other users).</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">  rpc</span><span style="color:#8DA101;--shiki-dark:#A7C080"> RouteChat</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#F85552;--shiki-dark:#E67E80">stream</span><span style="color:#35A77C;--shiki-dark:#83C092"> RouteNote</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">) </span><span style="color:#F85552;--shiki-dark:#E67E80">returns</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (</span><span style="color:#F85552;--shiki-dark:#E67E80">stream</span><span style="color:#35A77C;--shiki-dark:#83C092"> RouteNote</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">) &#123;&#125;</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">&#125;</span></span></code></pre>
+<p>生成的 <code>Servicer</code> 定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 文件名 examples/python/route_guide/route_guide_pb2_grpc.py</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> RouteGuideServicer</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">object</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">  def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> RouteChat</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      self,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      request_iterator:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">_server</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">_RequestIterator</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      context:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">ServicerContext</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  ):</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    """A Bidirectional streaming RPC.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    Accepts a stream of RouteNotes sent while a route is being traversed,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    while receiving other RouteNotes (e.g. from other users).</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    """</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    context</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">set_code</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">StatusCode</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">UNIMPLEMENTED)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    context</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">set_details</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'Method not implemented!'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    raise</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> NotImplementedError</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'Method not implemented!'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span></code></pre>
+<p>辅助函数则是对 <code>grpc.Server.add_generic_rpc_handlers</code> 的封装, 其定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 文件名 examples/python/route_guide/route_guide_pb2_grpc.py</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> add_RouteGuideServicer_to_server</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(servicer:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> RouteGuideServicer</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> server:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Server</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  rpc_method_handlers </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> &#123;</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">      # 省略其它内容</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      'RouteChat'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">: grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">stream_stream_rpc_method_handler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">          servicer</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">RouteChat,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">          request_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">route__guide__pb2</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">RouteNote</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">FromString,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">          response_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">route__guide__pb2</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">RouteNote</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">SerializeToString,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      ),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  &#125;</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  generic_handler </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">method_handlers_generic_handler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'routeguide.RouteGuide'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">, rpc_method_handlers)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  server</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">add_generic_rpc_handlers</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">((generic_handler,))</span></span></code></pre>
+<p>上面的 <code>generic_handler</code> 是一个 <code>grpc._utilities.DictionaryGenericHandler</code> 对象, 其属性 <code>_method_handlers</code> 是一个字典, key 为 <code>/service/method</code> (如上述 <code>/routeguide.RouteGuide/RouteChat</code>), 其 value 是 <code>grpc._utilities.RpcMethodHandler</code> 对象.</p>
+<h2 id="接口-Handler">接口 Handler</h2>
+<p>gRPC 提供了两种 Handler 接口:</p>
+<ul>
+<li><code>grpc.RpcMethodHandler</code> 方法 Handler</li>
+<li><code>grpc.ServiceRpcHandler</code> 服务 Handler</li>
+</ul>
+<p>方法 Handler 和 服务 Handler 一般由 gRPC 编译器 <code>grpc_tools.protoc</code> 自动生成, 无需我们自行创建.</p>
+<h3 id="方法-Handler">方法 Handler</h3>
+<p>方法 Handler 的接口定义为 <code>grpc.RpcMethodHandler</code>, 具体实现则为 <code>grpc._utilities.RpcMethodHandler</code>.</p>
+<p>其继承关系图如下</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span>grpc._utilities.RpcMethodHandler</span></span>
+<span class="line"><span>	-> grpc.RpcMethodHandler</span></span>
+<span class="line"><span>		-> abc.ABCMeta (metaclass)</span></span>
+<span class="line"><span>    -> collections.namedtuple</span></span></code></pre>
+<p>gRPC 提供了四种创建 <code>grpc.RpcMethodHandler</code> 的方法:</p>
+<ul>
+<li><code>unary_unary_rpc_method_handler</code></li>
+<li><code>unary_stream_rpc_method_handler</code></li>
+<li><code>stream_unary_rpc_method_handler</code></li>
+<li><code>stream_stream_rpc_method_handler</code></li>
+</ul>
+<p>这些方法与 gRPC 提供的四种接口类型一一对应. 这些方法拥有相似的函数签名,</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> xxx_yyy_rpc_method_handler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    behavior:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> Callable</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    request_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    response_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    pass</span></span></code></pre>
+<p>其中 <code>behavior</code> 是生成的 Servicer 中对应 <code>.proto</code> 中的 RPC 方法, <code>request_deserializer</code> 是 RPC 方法的输入参数 request 的反序列化方法, <code>response_serialzer</code> RPC 方法的输出 response 的 序列化方法.</p>
+<p><code>grpc._utilities.RpcMethodHandler </code> 的定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> RpcMethodHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#3A94C5;--shiki-dark:#7FBBB3">        collections</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">namedtuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'_RpcMethodHandler'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">, (</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'request_streaming'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'response_streaming'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'request_deserializer'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'response_serializer'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'unary_unary'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'unary_stream'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'stream_unary'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">            'stream_stream'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        )), </span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">RpcMethodHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    pass</span></span></code></pre>
+<p>其父类 <code>grpc.RpcMethodHandler</code> 没有定义自己的方法和属性, 因此其所有该类有 8 个属性:</p>
+<ul>
+<li><code>request_streaming</code>, <code>bool</code> 变量, 表明请求是否为流式</li>
+<li><code>response_streaming</code>, <code>bool</code> 变量, 表明响应是否为流式</li>
+<li><code>request_deserializer</code>, 请求序列化方法 (在编译时自动生成)</li>
+<li><code>response_serializer</code>, 响应序列化方法 (在编译时自动生成)</li>
+<li><code>unary_unary</code>, 响应函数</li>
+<li><code>unary_stream</code>, 响应函数</li>
+<li><code>stream_unary</code>, 响应函数</li>
+<li><code>stream_stream</code>, 响应函数</li>
+</ul>
+<p>不同类型的 handler 只需要赋值不同的属性即可, 如 <code>stream_stream_rpc_method_handler</code> 类 handler, 其初始化方法为:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_utilities</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">RpcMethodHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	request_streaming</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">True</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	response_streaming</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">True</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	request_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">request_deserializer,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	response_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">response_serializer,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	unary_unary</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	unary_stream</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	stream_unary</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">	stream_stream</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">behavior,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span></code></pre>
+<h3 id="服务-Handler">服务 Handler</h3>
+<p>服务 Handler 是一种特殊的 Handler, 可以将其理解为同一服务的各个方法 Handler 组成的集合.</p>
+<p>服务 Handler 的接口定义为 <code>grpc.ServiceRpcHandler</code>, 该接口是 <code>grpc.GenericRpcHandler</code> 的子接口. 具体实现则为 <code>grpc._utilities.DictionaryGenericHandler</code>.</p>
+<p>继承关系图如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span>grpc._utilities.DictionaryGenericHandler</span></span>
+<span class="line"><span>	-> grpc.ServiceRpcHandler</span></span>
+<span class="line"><span>		-> abc.ABCMeta (metaclass)</span></span>
+<span class="line"><span>        -> grpc.GenericRpcHandler (metaclass)</span></span>
+<span class="line"><span>        	-> abc.ABCMeta (metaclass)</span></span></code></pre>
+<p>可以使用 gRPC 提供的 <code>grpc.method_handlers_generic_handler</code> 创建服务 Handler.</p>
+<p><code>grpc._utilities.DictionaryGenericHandler</code> 的定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> DictionaryGenericHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">ServiceRpcHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __init__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        self,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        service:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> str</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        method_handlers:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> Mapping</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">str</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">RpcMethodHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">],</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    ):</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_name </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> service</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_method_handlers </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> &#123;</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            _common</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">fully_qualified_method</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(service, method): method_handler</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">            for</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> method, method_handler </span><span style="color:#F85552;--shiki-dark:#E67E80">in</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">iteritems</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(method_handlers)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        &#125;</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> service_name</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self)</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> -></span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> str</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">:</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        return</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_name</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> service</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> handler_call_details:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">HandlerCallDetails</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> -></span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">RpcMethodHandler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">:</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        return</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_method_handlers</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">get</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(handler_call_details</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">method)</span></span></code></pre>
+<p>其中 <code>service_name()</code> 是从 <code>grpc.ServiceRpcHandler</code> 继承的方法, <code>service(handler_call_details: grpc.HandlerCallDetails)</code> 是从 <code>grpc.GenericRpcHandler</code> 类继承的方法.</p>
+<h2 id="服务端拦截器-2">服务端拦截器</h2>
+<p>服务端拦截器的接口定义为 <code>grpc.ServerInterceptor</code>, 主要提供了一个方法 <code>intercept_service</code>, 该方法签名如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_service</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    self,</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">    # continuation 是一个函数, 该函数接收一个 grpc.HandlerCallDetails 参数</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    continuation:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> Callable</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    handler_call_details:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">HandlerCallDetails</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    pass</span></span></code></pre>
+<p>其中参数 <code>handler_call_details</code> 记录了一个方法的的基本信息, 如:</p>
+<ul>
+<li><code>method</code> 方法名</li>
+<li><code>invocation_metadata</code> 客户端调用时传入的元数据</li>
+<li>等</li>
+</ul>
+<p>gRPC 没有提供内置的服务端拦截器实现, 具体实现可以参考:</p>
+<ul>
+<li><code>examples/python/interceptors/headers/request_header_validator_interceptor.py</code></li>
+<li><code>examples/python/auth/customized_auth_server.py</code></li>
+<li><code>src/python/grpcio_tests/tests/unit/_interceptor_test.py</code></li>
+</ul>
+<p>一个服务端拦截器实现示例如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 文件: src/python/grpcio_tests/tests/unit/_interceptor_test.py</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> _GenericServerInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">ServerInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __init__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> fn):</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_fn </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> fn</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_service</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> continuation,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> handler_call_details):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        return</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">_fn</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(continuation, handler_call_details)</span></span>
+<span class="line"></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _filter_server_interceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(condition,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> interceptor):</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_service</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(continuation,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> handler_call_details):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        if</span><span style="color:#8DA101;--shiki-dark:#A7C080"> condition</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(handler_call_details):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">            return</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> interceptor</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">intercept_service</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(continuation,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">                                                 handler_call_details)</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        return</span><span style="color:#8DA101;--shiki-dark:#A7C080"> continuation</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(handler_call_details)</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    return</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _GenericServerInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(intercept_service)</span></span></code></pre>
+<h2 id="服务端上下文">服务端上下文</h2>
+<p>服务端上下文接口定义为 <code>grpc.ServicerContext</code>, 该类继承了共享上下文 <code>grpc.RpcContext</code>.</p>
+<p><code>grpc.ServicerContext</code> 在 <code>grpc.RpcContext</code> 的基础上新增了 13 个服务接口.</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> ServicerContext</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta, RpcContext)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> invocation_metadata</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> peer</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> peer_identities</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> peer_identity_key</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> auth_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> set_compression</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> compression):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> send_initial_metadata</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> initial_metadata):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> set_trailing_metadata</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> trailing_metadata):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> abort</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> code,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> details):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> abort_with_status</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> status):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> set_code</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> code):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> set_details</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> details):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> disable_next_mssage_compression</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<p>根据 gRPC 的设计理念, gRPC 服务中的异常都建议使用 <code>grpc.ServicerContext</code> 回传给调用方, 而不是使用自定义响应包中的 <code>error_code</code> 和 <code>error_message</code>.</p>
+<p><code>grpc.ServicerContext</code> 中有一个重要方法 <code>set_code()</code>, 该方法可以设置一个 <code>grpc.StatusCode</code>, 并最终由客户端上下文 <code>grpc.Call</code> 中的 <code>code()</code> 方法返回给调用者.</p>
+<p>状态码 <code>grpc.StatusCode</code> 是一个枚举类型, 定义了 gRPC 工作过程中常用的状态码, 如 <code>OK</code>, <code>CANCELLED</code>, <code>RESOURCE_EXHAUSTED</code> 等. 具体可以参考 <a target="_blank" rel="noopener" href="https://grpc.github.io/grpc/python/grpc.html#grpc-status-code">gRPC Status Code 官方文档</a>.</p>
+<p>服务端 Context 的具体实现为 <code>grpc._server._Context</code>, 该类定义在 <code>src/python/grpcio/grpc/_server.py</code> 文件中, 在此不详细展开.</p>
+<h1>客户端概念</h1>
+<p>客户端的主要概念有:</p>
+<ul>
+<li>Stub</li>
+<li>Channel</li>
+<li>接口 Callable</li>
+<li>客户端拦截器 Interceptor</li>
+<li>客户端上下文 Context</li>
+<li>异步调用结果 Future</li>
+</ul>
+<h2 id="客户端-Stub">客户端 Stub</h2>
+<p>客户端 Stub 是编译 <code>.proto</code> 文件时自动生成的. Stub 初始化时需要传入 Channel, 对 Stub 的所有请求最终都会由 Channel 来完成.</p>
+<p>还是以前面的 <code>RouteGuide</code> 为例, 生成的 <code>RouteGuideStub</code> 如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic"># 文件名 examples/python/route_guide/route_guide_pb2_grpc.py</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> RouteGuideStub</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">object</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">  def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __init__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> channel):</span></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">	# 省略其它内容</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">RouteChat </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> channel</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">stream_stream</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        '/routeguide.RouteGuide/RouteChat'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        request_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">route__guide__pb2</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">RouteNote</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">SerializeToString,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        response_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">route__guide__pb2</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">RouteNote</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">FromString,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        )</span></span></code></pre>
+<p>调用 <code>RouteGuideStub.RouteChat()</code> 方法实际上是在调用 <code>channel.stream_stream()</code> 返回的 <code>grpc.StreamStreamMultiCallable</code> 对象.</p>
+<h2 id="Channel">Channel</h2>
+<h3 id="创建-Channel">创建 Channel</h3>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> insecure_channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    target:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> str</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    options:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> List</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">tuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">]</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    compression:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Compression </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    """Creates an insecure Channel to a server.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    The returned Channel is thread-safe.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    Args:</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      target: The server address</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      options: An optional list of key-value pairs (:term:`channel_arguments`</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        in gRPC Core runtime) to configure the channel.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      compression: An optional value indicating the compression method to be</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">        used over the lifetime of the channel. This is an EXPERIMENTAL option.</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    Returns:</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">      A Channel.</span></span>
+<span class="line"><span style="color:#DFA000;--shiki-dark:#DBBC7F">    """</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    pass</span></span></code></pre>
+<h3 id="接口定义-grpc-Channel">接口定义 <code>grpc.Channel</code></h3>
+<p>Channel 的接口 <code>grpc.Channel</code> 定义在 <code>src/python/grpcio/grpc/__init__.py</code> 中. 主体定义如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> Channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> subscribe</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> callback,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> try_to_connect</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">False</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> unsubscribe</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> callback):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> unary_unary</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> method,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> response_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> unary_stream</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> method,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> response_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> stream_unary</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> method,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> response_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> stream_stream</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> method,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_serializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> response_deserializer</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> close</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __enter__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __exit__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> exc_type,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> exc_val,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> exc_tb):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<p>gRPC 中, Channel 本质上是 HTTP2 长连接的抽象, gRPC 请求应该尽可能地复用 Channel.</p>
+<p>参考资料:</p>
+<ol>
+<li><a target="_blank" rel="noopener" href="https://stackoverflow.com/questions/63749113/grpc-call-channel-connection-and-http-2-lifecycle/63839453#63839453">Stack overflow: gRPC call, channel, connection and HTTP/2 lifecycle</a></li>
+<li><a target="_blank" rel="noopener" href="https://docs.microsoft.com/en-us/aspnet/core/grpc/performance?view=aspnetcore-5.0">Performance best practices with gRPC</a></li>
+</ol>
+<h3 id="接口实现-grpc-channel-Channel">接口实现 <code>grpc._channel.Channel</code></h3>
+<p>模块 <code>src/python/grpcio/grpc/_channel.py</code> 给出了 <code>grpc.Channel</code> 接口的实现. 其初始化函数:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> Channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">Channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __init__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        self,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        target:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> str</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        options:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> List</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">tuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">],</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        credentials:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">ChannelCredentials</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        compression:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Compression</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    ):</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        python_options, core_options </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _separate_channel_options</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(options)</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_single_threaded_unary_stream </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> _DEFAULT_SINGLE_THREADED_UNARY_STREAM</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">_process_python_options</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(python_options)</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_channel </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            _common</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">encode</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(target), </span><span style="color:#8DA101;--shiki-dark:#A7C080">_augment_options</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(core_options, compression),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            credentials)</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_call_state </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _ChannelCallState</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DF69BA;--shiki-dark:#D699B6">self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_channel)</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_connectivity_state </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _ChannelConnectivityState</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DF69BA;--shiki-dark:#D699B6">self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_channel)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">fork_register_channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#DF69BA;--shiki-dark:#D699B6">self</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span></code></pre>
+<p>由上述代码可知, <code>grpc._channel.Channel</code> 使用了 Cython 实现 <code>cygrpc.Channel</code>.</p>
+<p><code>cygrpc.Channel</code> 的初始化函数如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">cdef </span><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> Channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">:</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">  def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __cinit__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      self,</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">      bytes </span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">target,</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">      object </span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">arguments,</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">      ChannelCredentials </span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">channel_credentials,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">  ):</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    arguments </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> () </span><span style="color:#F85552;--shiki-dark:#E67E80">if</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> arguments </span><span style="color:#F57D26;--shiki-dark:#E69875">is</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#F85552;--shiki-dark:#E67E80"> else</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> tuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(arguments)</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">    fork_handlers_and_grpc_init</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_state </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _ChannelState</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_state</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">c_call_completion_queue </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">        grpc_completion_queue_create_for_next</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(NULL))</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_state</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">c_connectivity_completion_queue </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">        grpc_completion_queue_create_for_next</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(NULL))</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">    self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_arguments </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> arguments</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    cdef _ChannelArgs channel_args </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _ChannelArgs</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(arguments)</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    if</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> channel_credentials </span><span style="color:#F57D26;--shiki-dark:#E69875">is</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">:</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">      self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_state</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">c_channel </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc_insecure_channel_create</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#F57D26;--shiki-dark:#E69875">          &#x3C;</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">char </span><span style="color:#F57D26;--shiki-dark:#E69875">*></span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">target, channel_args</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">c_args</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(), NULL)</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    else</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">:</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">      c_channel_credentials </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> channel_credentials</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">c</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">      self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_state</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">c_channel </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc_secure_channel_create</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">          c_channel_credentials, </span><span style="color:#F57D26;--shiki-dark:#E69875">&#x3C;</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">char </span><span style="color:#F57D26;--shiki-dark:#E69875">*></span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">target, channel_args</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">c_args</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(), NULL)</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">      grpc_channel_credentials_release</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(c_channel_credentials)</span></span></code></pre>
+<p><code>cygrpc.Channel</code> 会调用 C 函数 <code>grpc_insecure_channel_create()</code> 或 <code>grpc_secure_channel_create()</code> , 这两者都会返回 <code>grpc_channel</code> 对象.</p>
+<p><code>grpc_channel</code> 定义在 <code>src/core/lib/surface/channel.h</code> 文件中, 同时该文件还定义了一组操作 <code>grpc_channel</code> 的方法.</p>
+<h3 id="Channel-的状态">Channel 的状态</h3>
+<p><code>grpc.Channel</code> 有自己的状态, 状态使用 <code>grpc.ChannelConnectivity</code> 变量存储.</p>
+<p><code>grpc.ChannelConnectivity</code> 是一个 <code>enum.Enum</code> 枚举类型, 一共有五个不同的枚举变量:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#939F91;--shiki-dark:#859289">@</span><span style="color:#8DA101;--shiki-dark:#A7C080">enum</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">unique</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> ChannelConnectivity</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">enum</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">Enum</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    IDLE </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (_cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ConnectivityState</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">idle, </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'idle'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    CONNECTING </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (_cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ConnectivityState</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">connecting, </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'connecting'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    READY </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (_cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ConnectivityState</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ready, </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'ready'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    TRANSIENT_FAILURE </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (_cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ConnectivityState</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">transient_failure,</span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'transient failure'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    SHUTDOWN </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (_cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ConnectivityState</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">shutdown, </span><span style="color:#DFA000;--shiki-dark:#DBBC7F">'shutdown'</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span></code></pre>
+<p>从上面的源码可以看到, 每个枚举变量都是一个 元组, 该元素表示了 <code>grpc.Channel</code> 的状态 与 <code>cygrpc.Channel</code> 的状态的对应关系. 后者的状态使用了枚举类 <code>cygrpc.ConnectivityState</code> (位于文件 <code>src/python/grpcio/grpc/_cython/_cygrpc/records.pyx.pxi</code> 中)来存储.</p>
+<h2 id="Callable">Callable</h2>
+<p>前面讲到, 调用 Stub 的方法实际上是对相应的 <code>Callable</code> 类的调用.</p>
+<p>gRPC 的四种接口分别对应了四种 <code>Callable</code></p>
+<ul>
+<li><code>grpc.UnaryUnaryMultiCallable</code></li>
+<li><code>grpc.UnaryStreamMultiCallable</code></li>
+<li><code>grpc.StreamUnaryMultiCallable</code></li>
+<li><code>grpc.StreamStreamMultiCallable</code></li>
+</ul>
+<p>上述 Callable 类在 <code>src/python/grpcio/grpc/__init__.py</code> 中给出了抽象接口, 在 <code>src/python/grpcio/grpc/_channel.py</code> 给出具体实现.</p>
+<blockquote>
+<p>上述四种 Multi-Callable 中, <code>grpc.xxxUnaryyyy</code> 两个类表示返回的非流数据, 这两个类除了定义 <code>__call__()</code> 方法外, 还定义了</p>
+<ul>
+<li><code>future()</code> 实现异步调用</li>
+<li><code>with_call()</code> 实现同步调用</li>
+</ul>
+<p>两个方法. 具体可以参考对应的接口定义和实现.</p>
+</blockquote>
+<p>我们重点关注较为复杂的 <code>grpc.StreamStreamMultiCallable</code> 及其实现 <code>grpc._channel.StreamStreamMultiCallable</code>.</p>
+<h3 id="接口-grpc-StreamStreamMultiCallable">接口: <code>grpc.StreamStreamMultiCallable</code></h3>
+<p>其调用参数为</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> StreamStreamMultiCallable</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __call__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        self,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        request_iterator:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> Iterator</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        timeout:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> float</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        metadata:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> List</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">tuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">]</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        credentials:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">CallCredentials </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        wait_for_ready:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> bool</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        compression:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Compression </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    ):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<h3 id="实现-grpc-channel-StreamStreamMultiCallable">实现: <code>grpc._channel._StreamStreamMultiCallable</code></h3>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> _StreamStreamMultiCallable</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">StreamStreamMultiCallable</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#939F91;--shiki-light-font-style:italic;--shiki-dark:#859289;--shiki-dark-font-style:italic">    # pylint: disable=too-many-arguments</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __init__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        self,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        channel:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Channel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        managed_call:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">IntegratedCall</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        method:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> bytes</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        request_serializer,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        response_deserializer,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    ):</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_channel </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> channel</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_managed_call </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> managed_call</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_method </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> method</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_request_serializer </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_serializer</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_response_deserializer </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> response_deserializer</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">        self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_context </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">build_census_context</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> __call__</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        self,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        request_iterator:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> Iterator</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        timeout:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> float</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        metadata:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> List</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">[</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">tuple</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">]</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        credentials:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">CallCredentials </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        wait_for_ready:</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> bool</span><span style="color:#F57D26;--shiki-dark:#E69875"> =</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        compression:</span><span style="color:#8DA101;--shiki-dark:#A7C080"> grpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">Compression </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">    ):</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        deadline </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _deadline</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(timeout)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        state </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _RPCState</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(_STREAM_STREAM_INITIAL_DUE, </span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">, </span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">, </span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">, </span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        initial_metadata_flags </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _InitialMetadataFlags</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">()</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">with_wait_for_ready</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(wait_for_ready)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        augmented_metadata </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> _compression</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">augment_metadata</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(metadata, compression)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        operationses </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> (</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            (</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">                cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">SendInitialMetadataOperation</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(augmented_metadata,initial_metadata_flags),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">                cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">ReceiveStatusOnClientOperation</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(_EMPTY_FLAGS),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            ),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            (cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">ReceiveInitialMetadataOperation</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(_EMPTY_FLAGS),),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        )</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        event_handler </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _event_handler</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(state, </span><span style="color:#DF69BA;--shiki-dark:#D699B6">self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_response_deserializer)</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        call </span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#DF69BA;--shiki-dark:#D699B6"> self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#8DA101;--shiki-dark:#A7C080">_managed_call</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            cygrpc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">PropagationConstants</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">GRPC_PROPAGATE_DEFAULTS,</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">            self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_method,</span></span>
+<span class="line"><span style="color:#35A77C;--shiki-dark:#83C092">            None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">,</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">            _determine_deadline</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(deadline),</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            augmented_metadata,</span></span>
+<span class="line"><span style="color:#35A77C;--shiki-dark:#83C092">            None</span><span style="color:#F85552;--shiki-dark:#E67E80"> if</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> credentials </span><span style="color:#F85552;--shiki-dark:#E67E80">is</span><span style="color:#35A77C;--shiki-dark:#83C092"> None</span><span style="color:#F85552;--shiki-dark:#E67E80"> else</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> credentials</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_credentials,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            operationses,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            event_handler,</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">            self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_context,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        )</span></span>
+<span class="line"><span style="color:#8DA101;--shiki-dark:#A7C080">        _consume_request_iterator</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            request_iterator,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            state,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            call,</span></span>
+<span class="line"><span style="color:#DF69BA;--shiki-dark:#D699B6">            self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_request_serializer,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">            event_handler,</span></span>
+<span class="line"><span style="color:#5C6A72;--shiki-dark:#D3C6AA">        )</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        return</span><span style="color:#8DA101;--shiki-dark:#A7C080"> _MultiThreadedRendezvous</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(state, call, </span><span style="color:#DF69BA;--shiki-dark:#D699B6">self</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">_response_deserializer, deadline)</span></span></code></pre>
+<blockquote>
+<p><strong>census</strong>, 其中文释义为 <code>人口普查; (官方的)调查</code> 等, 来自 <code>self._context = cygrpc.build_census_context()</code></p>
+<p><strong>rendezvous</strong>, 其中文释义为 <code>约会, 聚会, 集合; 约会地点, 聚会场所</code> 等含义 , 来自 <code>_MultiThreadedRendezvous(state, call, self._response_deserializer, deadline)</code></p>
+</blockquote>
+<p>从上述代码可知, 输入流是通过 <code>grpc._channel._consume_request_iterator()</code> 方法实现的, 该方法内部为一个 <code>while True</code> 循环.</p>
+<p><code>grpc._channel.StreamStreamMultiCallable</code> 最终会由 <code>grpc._channel._MultiThreadedRendezvous</code> 类来实现.</p>
+<p>继承关系图</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span>grpc._channel._MultiThreadedRendezvous</span></span>
+<span class="line"><span>	-> grpc._channel._Rendezvous</span></span>
+<span class="line"><span>		-> grpc.RpcError -> Exception</span></span>
+<span class="line"><span>		-> grpc.RpcContext -> abc.ABCMeta (metaclass)</span></span>
+<span class="line"><span>	-> grpc.Call</span></span>
+<span class="line"><span>		-> abc.ABCMeta (metaclass)</span></span>
+<span class="line"><span>		-> grpc.RpcContext (metaclass) -> abc.ABCMeta (metaclass)</span></span>
+<span class="line"><span>	-> grpc.Future</span></span>
+<span class="line"><span>		-> abc.ABCMeta (metaclass)</span></span></code></pre>
+<p>其父类 <code>grpc._channel._Rendezvous</code> 实现了 <code>__iter__()</code> 和 <code>__next__()</code> 方法, 表明 <code>grpc._channel._MultiThreadedRendezvous</code> 既是迭代器, 也是可迭代对象.</p>
+<h2 id="客户端拦截器-2">客户端拦截器</h2>
+<p>gRPC 提供了四种客户端拦截器:</p>
+<ul>
+<li><code>UnaryUnaryClientInterceptor</code></li>
+<li><code>UnaryStreamClientInterceptor</code></li>
+<li><code>StreamUnaryClientInterceptor</code></li>
+<li><code>StreamStreamClientInterceptor</code></li>
+</ul>
+<p>每个拦截器都定义了一个拦截器方法, 分别如下:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> UnaryUnaryClientInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_unary_unary</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> continuation,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> client_call_details,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> UnaryStreamClientInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_unary_stream</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> continuation,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> client_call_details,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> StreamUnaryClientInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_stream_unary</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> continuation,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> client_call_details,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_iterator):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> StreamStreamClientInterceptor</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> intercept_stream_stream</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> continuation,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> client_call_details,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> request_iterator):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<p>这些接口拥有相似的函数签名:</p>
+<ul>
+<li><code>continuation</code> 是一个函数, 该函数接收 <code>grpc.ClientCallDetails</code> 类型的参数, 也就是接口的下一个参数 <code>client_call_details</code></li>
+<li><code>client_call_details</code> 是一个 <code>grpc.ClientCallDetails</code> 类型参数</li>
+<li><code>request</code> 和 <code>request_iterator</code> 是对应函数的请求参数</li>
+</ul>
+<p>参数 <code>client_call_details</code> 记录了一个客户端请求的详细信息, 如:</p>
+<ul>
+<li><code>method</code> 方法名</li>
+<li><code>timeout</code> 超时时间</li>
+<li><code>metadata</code> 请求元数据</li>
+<li><code>credentials</code> 请求证书</li>
+<li><code>wait_for_ready</code> 等待就绪标识, 具体参考 <a target="_blank" rel="noopener" href="https://grpc.github.io/grpc/python/glossary.html#term-wait_for_ready">术语 <code>wait_for_ready</code></a></li>
+<li><code>compression</code> 客户端请求压缩方法</li>
+<li>等等, 具体参考 <code>grpc.ClientCallDetails</code> 类实现</li>
+</ul>
+<p>同样, gRPC 也没有提供内置的客户端拦截器实现. 客户端拦截器实现可以参考:</p>
+<ul>
+<li><code>examples/python/interceptors/headers/generic_client_interceptor.py</code></li>
+<li><code>src/python/grpcio_tests/tests/unit/_interceptor_test.py</code></li>
+</ul>
+<p><code>src/python/grpcio_tests/tests/unit/_interceptor_test.py</code> 文件中的 <code>_LoggingInterceptor</code> 给出了一个较好的拦截器实现示例.</p>
+<h2 id="客户端上下文">客户端上下文</h2>
+<p>客户端上下文接口定义为 <code>grpc.Call</code> , 该接口继承了 <code>grpc.RpcContext</code>.</p>
+<p><code>grpc.Call</code> 在 <code>grpc.RpcContext</code> 的基础上新增了 4 个接口.</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> Call</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta, RpcContext)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> initial_metadata</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> trailing_metadata</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> code</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> details</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<p><code>grpc.Call</code> 及其子类 实际上就是一次 gRPC 请求的返回接口. <code>grpc.Channel</code> 的各个 Callable (如前面介绍的 <code>grpc._channel._StreamStreamMultiCallable</code> 等) 调用时的返回值都是 <code>grpc.Call</code> 的实现, 如:</p>
+<ul>
+<li>
+<p><code>grpc._channel._SingleThreadedRendezvous</code></p>
+</li>
+<li>
+<p><code>grpc._channel._MultiThreadedRendezvous</code></p>
+</li>
+<li>
+<p><code>grpc._channel._InactiveRpcError</code></p>
+</li>
+<li>
+<p><code>grpc._interceptor._FailureOutcome</code></p>
+</li>
+<li>
+<p><code>grpc._interceptor._UnaryOutcome</code></p>
+</li>
+<li>
+<p>等等</p>
+</li>
+</ul>
+<p>从这些实现来看, 它们都同时继承了 <code>grpc.Call</code> 和 <code>grpc.Future</code>.</p>
+<p>客户端上下文中有一个重要的方法 <code>code()</code> , 客户端可以通过该方法获取服务端设置的状态码. 该状态码一般由服务端上下文 <code>grpc.ServicerContext</code> 的 <code>set_code()</code> 方法设置.</p>
+<h2 id="异步调用结果-Future">异步调用结果 Future</h2>
+<p>前面讲到, <code>grpc.Call</code> 代表 gRPC 请求的返回结果. 实现了 <code>grpc.Call</code> 接口的方法都实现了 <code>grpc.Future</code> 用于实现异步调用 gRPC.</p>
+<p><code>grpc.Future</code> 提供了如下方法:</p>
+<pre class="shiki shiki-themes everforest-light everforest-dark" style="background-color:#fdf6e3;--shiki-dark-bg:#2d353b;color:#5c6a72;--shiki-dark:#d3c6aa" tabindex="0"><code><span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">class</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3"> Future</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">six</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#3A94C5;--shiki-dark:#7FBBB3">with_metaclass</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(abc</span><span style="color:#939F91;--shiki-dark:#859289">.</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">ABCMeta)):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> cancel</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> cancelled</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> running</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> done</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> result</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> timeout</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> exception</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> timeout</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> traceback</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> timeout</span><span style="color:#F57D26;--shiki-dark:#E69875">=</span><span style="color:#35A77C;--shiki-dark:#83C092">None</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span>
+<span class="line"></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">    def</span><span style="color:#8DA101;--shiki-dark:#A7C080"> add_done_callback</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA">(self,</span><span style="color:#5C6A72;--shiki-dark:#D3C6AA"> fn):</span></span>
+<span class="line"><span style="color:#F85552;--shiki-dark:#E67E80">        pass</span></span></code></pre>
+<p>除了前面提到的 <code>grpc.Call</code> 与 <code>grpc.Future</code>的共同子类外, <code>grpc.Future</code> 还有一个额外的子类 <code>grpc._utilities._ChannelReadyFuture</code>, 这个类由 <code>grpc.channel_ready_future()</code> 方法暴露给调用方使用.</p>
+
+  </div>
+
+  
+  <div>
+    
+      <div 
+        class="post-note note-warning copyright" 
+        style="margin-top: 42px">
+        <p>
+          <span style="font-weight: bold;">作者：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="/about">
+            深钓大虾
+          </a>
+        </p>
+        <p>
+          <span style="font-weight: bold;">文章链接：</span><a 
+            target="_blank" 
+            rel="nofollow noopener noreferrer" 
+            href="https://loveychen.github.io/2021/01/07/grpc-concepts/">
+            https://loveychen.github.io/2021/01/07/grpc-concepts/
+          </a>
+        </p>
+        <p><span style="font-weight: bold;">版权声明：</span>本博客所有文章除特别声明外，均采用<a target="_blank" rel="noopener" href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh">CC BY-NC-SA 4.0 协议</a>。转载请注明出处！</p>
+      </div>
+    
+  </div>
+</article>
+<div class="nav">
+  
+    <div class="nav-item-prev">
+      <a 
+        href="/2021/04/14/intro-convlab2-user-simulator-agenda/" 
+        class="nav-link">
+        <i class="iconfont icon-left nav-prev-icon"></i>
+        <div>
+          <div class="nav-label">上一篇</div>
+          
+            <div class="nav-title">ConvLab2 01. Agenda-based User Simulator </div>
+          
+        </div>
+      </a>
+    </div>
+  
+  
+</div>
+
+  <div 
+    class="card card-content comment-card" 
+    style="margin-top: 16px;">
+    <div class="comment-card-title">评论</div>
+    
+  <div id="vcomments"></div>
+  
+  <script>
+    loadScript("//unpkg.com/valine@1.4.15/dist/Valine.min.js");
+    var oldLoadVa = window.onload;
+    window.onload = function () {
+      oldLoadVa && oldLoadVa();
+      new Valine({
+        el: '#vcomments',
+        appId: 'LC7p0faybQsaBhYb4lg1yjQd-MdYXbMMI',
+        appKey: 'uu6JdEPv1lLNFqIMvsG0EKOs',
+        placeholder: '请多指教',
+        path: window.location.pathname,
+        avatar: 'mp',
+        meta: ["nick","mail"],
+        pageSize: '10',
+        lang: '',
+        visitor: 'false',
+        highlight: true,
+        recordIP: false,
+        
+        
+        
+        enableQQ: 'false',
+        requiredFields: [],
+      });
+    };
+  </script>
+
+  </div>
+
+<div 
+  class="card card-content toc-card" 
+  id="mobiletoc">
+  <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">通用概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8B%A6%E6%88%AA%E5%99%A8-Interceptor"><span class="toc-number">1.1.</span> <span class="toc-text">拦截器 Interceptor</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="toc-number">1.1.1.</span> <span class="toc-text">服务端拦截器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="toc-number">1.1.2.</span> <span class="toc-text">客户端拦截器</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%8A%E4%B8%8B%E6%96%87-Context"><span class="toc-number">1.2.</span> <span class="toc-text">上下文 Context</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%85%B1%E4%BA%AB-Context"><span class="toc-number">1.2.1.</span> <span class="toc-text">共享 Context</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF-Context"><span class="toc-number">1.2.2.</span> <span class="toc-text">服务端 Context</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF-Context"><span class="toc-number">1.2.3.</span> <span class="toc-text">客户端 Context</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">服务端概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF-Server"><span class="toc-number">2.1.</span> <span class="toc-text">服务端 Server</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9B%E5%BB%BA%E6%9C%8D%E5%8A%A1-grpc-server"><span class="toc-number">2.1.1.</span> <span class="toc-text">创建服务 grpc.server()</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Server-%E6%8E%A5%E5%8F%A3-grpc-Server"><span class="toc-number">2.1.2.</span> <span class="toc-text">Server 接口 grpc.Server</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Cython-%E5%AE%9E%E7%8E%B0-cygrpc-Server"><span class="toc-number">2.1.3.</span> <span class="toc-text">Cython 实现 cygrpc.Server</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#CPP-%E5%AE%9E%E7%8E%B0-grpc-server-%E4%B8%8E-grpc-core-Server"><span class="toc-number">2.1.4.</span> <span class="toc-text">CPP 实现 grpc_server 与 grpc_core::Server</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1-Servicer"><span class="toc-number">2.2.</span> <span class="toc-text">服务 Servicer</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3-Handler"><span class="toc-number">2.3.</span> <span class="toc-text">接口 Handler</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%96%B9%E6%B3%95-Handler"><span class="toc-number">2.3.1.</span> <span class="toc-text">方法 Handler</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1-Handler"><span class="toc-number">2.3.2.</span> <span class="toc-text">服务 Handler</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8-2"><span class="toc-number">2.4.</span> <span class="toc-text">服务端拦截器</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="toc-number">2.5.</span> <span class="toc-text">服务端上下文</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">客户端概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF-Stub"><span class="toc-number">3.1.</span> <span class="toc-text">客户端 Stub</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Channel"><span class="toc-number">3.2.</span> <span class="toc-text">Channel</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9B%E5%BB%BA-Channel"><span class="toc-number">3.2.1.</span> <span class="toc-text">创建 Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3%E5%AE%9A%E4%B9%89-grpc-Channel"><span class="toc-number">3.2.2.</span> <span class="toc-text">接口定义 grpc.Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3%E5%AE%9E%E7%8E%B0-grpc-channel-Channel"><span class="toc-number">3.2.3.</span> <span class="toc-text">接口实现 grpc._channel.Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Channel-%E7%9A%84%E7%8A%B6%E6%80%81"><span class="toc-number">3.2.4.</span> <span class="toc-text">Channel 的状态</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Callable"><span class="toc-number">3.3.</span> <span class="toc-text">Callable</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3-grpc-StreamStreamMultiCallable"><span class="toc-number">3.3.1.</span> <span class="toc-text">接口: grpc.StreamStreamMultiCallable</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%9E%E7%8E%B0-grpc-channel-StreamStreamMultiCallable"><span class="toc-number">3.3.2.</span> <span class="toc-text">实现: grpc._channel._StreamStreamMultiCallable</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8-2"><span class="toc-number">3.4.</span> <span class="toc-text">客户端拦截器</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="toc-number">3.5.</span> <span class="toc-text">客户端上下文</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%BC%82%E6%AD%A5%E8%B0%83%E7%94%A8%E7%BB%93%E6%9E%9C-Future"><span class="toc-number">3.6.</span> <span class="toc-text">异步调用结果 Future</span></a></li></ol></li></ol>
+</div>
+
+            </main>
+            
+            <!-- Right sidebar -->
+            <aside class="right-column" id="right-sidebar">
+              <div class="sticky-widescreen">
+  
+  
+    <article class="card card-content toc-card">
+      <div class="toc-header">
+  <i 
+    class="iconfont icon-menu" 
+    style="padding-right: 2px;">
+  </i>目录
+</div>
+<ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">1.</span> <span class="toc-text">通用概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8B%A6%E6%88%AA%E5%99%A8-Interceptor"><span class="toc-number">1.1.</span> <span class="toc-text">拦截器 Interceptor</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="toc-number">1.1.1.</span> <span class="toc-text">服务端拦截器</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8"><span class="toc-number">1.1.2.</span> <span class="toc-text">客户端拦截器</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E4%B8%8A%E4%B8%8B%E6%96%87-Context"><span class="toc-number">1.2.</span> <span class="toc-text">上下文 Context</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%85%B1%E4%BA%AB-Context"><span class="toc-number">1.2.1.</span> <span class="toc-text">共享 Context</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF-Context"><span class="toc-number">1.2.2.</span> <span class="toc-text">服务端 Context</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF-Context"><span class="toc-number">1.2.3.</span> <span class="toc-text">客户端 Context</span></a></li></ol></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">2.</span> <span class="toc-text">服务端概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF-Server"><span class="toc-number">2.1.</span> <span class="toc-text">服务端 Server</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9B%E5%BB%BA%E6%9C%8D%E5%8A%A1-grpc-server"><span class="toc-number">2.1.1.</span> <span class="toc-text">创建服务 grpc.server()</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Server-%E6%8E%A5%E5%8F%A3-grpc-Server"><span class="toc-number">2.1.2.</span> <span class="toc-text">Server 接口 grpc.Server</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Cython-%E5%AE%9E%E7%8E%B0-cygrpc-Server"><span class="toc-number">2.1.3.</span> <span class="toc-text">Cython 实现 cygrpc.Server</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#CPP-%E5%AE%9E%E7%8E%B0-grpc-server-%E4%B8%8E-grpc-core-Server"><span class="toc-number">2.1.4.</span> <span class="toc-text">CPP 实现 grpc_server 与 grpc_core::Server</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1-Servicer"><span class="toc-number">2.2.</span> <span class="toc-text">服务 Servicer</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3-Handler"><span class="toc-number">2.3.</span> <span class="toc-text">接口 Handler</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%96%B9%E6%B3%95-Handler"><span class="toc-number">2.3.1.</span> <span class="toc-text">方法 Handler</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1-Handler"><span class="toc-number">2.3.2.</span> <span class="toc-text">服务 Handler</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8-2"><span class="toc-number">2.4.</span> <span class="toc-text">服务端拦截器</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E6%9C%8D%E5%8A%A1%E7%AB%AF%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="toc-number">2.5.</span> <span class="toc-text">服务端上下文</span></a></li></ol></li><li class="toc-item toc-level-1"><a class="toc-link"><span class="toc-number">3.</span> <span class="toc-text">客户端概念</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF-Stub"><span class="toc-number">3.1.</span> <span class="toc-text">客户端 Stub</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Channel"><span class="toc-number">3.2.</span> <span class="toc-text">Channel</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%88%9B%E5%BB%BA-Channel"><span class="toc-number">3.2.1.</span> <span class="toc-text">创建 Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3%E5%AE%9A%E4%B9%89-grpc-Channel"><span class="toc-number">3.2.2.</span> <span class="toc-text">接口定义 grpc.Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3%E5%AE%9E%E7%8E%B0-grpc-channel-Channel"><span class="toc-number">3.2.3.</span> <span class="toc-text">接口实现 grpc._channel.Channel</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#Channel-%E7%9A%84%E7%8A%B6%E6%80%81"><span class="toc-number">3.2.4.</span> <span class="toc-text">Channel 的状态</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Callable"><span class="toc-number">3.3.</span> <span class="toc-text">Callable</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#%E6%8E%A5%E5%8F%A3-grpc-StreamStreamMultiCallable"><span class="toc-number">3.3.1.</span> <span class="toc-text">接口: grpc.StreamStreamMultiCallable</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#%E5%AE%9E%E7%8E%B0-grpc-channel-StreamStreamMultiCallable"><span class="toc-number">3.3.2.</span> <span class="toc-text">实现: grpc._channel._StreamStreamMultiCallable</span></a></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E6%8B%A6%E6%88%AA%E5%99%A8-2"><span class="toc-number">3.4.</span> <span class="toc-text">客户端拦截器</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%AE%A2%E6%88%B7%E7%AB%AF%E4%B8%8A%E4%B8%8B%E6%96%87"><span class="toc-number">3.5.</span> <span class="toc-text">客户端上下文</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#%E5%BC%82%E6%AD%A5%E8%B0%83%E7%94%A8%E7%BB%93%E6%9E%9C-Future"><span class="toc-number">3.6.</span> <span class="toc-text">异步调用结果 Future</span></a></li></ol></li></ol>
+    </article>
+  
+  
+  <article class="card card-content">
+    <div class="recent-posts-card">
+  <div class="recent-posts-header">
+    <i 
+      class="iconfont icon-wenzhang_huaban" 
+      style="padding-right: 2px;">
+    </i>最近文章
+  </div>
+  <div class="recent-posts-list">
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-08-05</div>
+        <a href="/2025/08/05/LangChain-Memory-Comparison/"><div class="recent-posts-item-content">LangChain Memory 类型详细对比分析</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2025-06-12</div>
+        <a href="/2025/06/12/Learning-VLLM-serve-model/"><div class="recent-posts-item-content">VLLM 学习之路(一) - 模型服务</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2022-11-24</div>
+        <a href="/2022/11/24/brief-intro-to-logit/"><div class="recent-posts-item-content">从 Logistic Regression 谈起: logit、logic、logistic 傻傻分不清楚</div></a>
+      </div>
+    
+      <div class="recent-posts-item">
+        <div class="recent-posts-item-title">2021-06-11</div>
+        <a href="/2021/06/11/20210611-memory-network-for-ds/"><div class="recent-posts-item-content">Memory Network 在对话系统中的应用</div></a>
+      </div>
+    
+  </div>
+</div>
+  </article>
+  
+  
+</div>
+            </aside>
+            
+            <!-- Right sidebar toggle button -->
+            <button class="sidebar-toggle right-toggle" id="right-sidebar-toggle">
+              <span>点击查看目录</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+     
+    <footer class="footer">
+  <div class="footer-container">
+    <div>
+      <div class="footer-dsc">
+        <span>
+          Copyright ©
+          
+            2020
+          
+          
+                - 
+                2025
+          
+        </span>
+        &nbsp;
+        <a 
+          href="/" 
+          class="footer-link">
+          
+        </a>
+      </div>
+    </div>
+
+    
+      <div class="footer-dsc">
+        
+          Powered by
+          <a 
+            href="https://hexo.io/" 
+            class="footer-link" 
+            target="_blank" 
+            rel="nofollow noopener noreferrer">
+            &nbsp;Hexo
+          </a>
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          Theme -
+          <a 
+            href="https://github.com/theme-kaze" 
+            class="footer-link" 
+            target="_blank"
+            rel="nofollow noopener noreferrer">
+            &nbsp;Kaze
+          </a>
+        
+      </div>
+    
+    
+    
+    
+      <div class="footer-dsc">
+        
+          本站总访问量<span id="busuanzi_value_site_pv"></span>次
+        
+        
+          <span>&nbsp;|&nbsp;</span>
+        
+        
+          本站总访客数<span id="busuanzi_value_site_uv"></span>次
+        
+      </div>
+      
+    
+</footer>
+ 
+    
+  <a 
+    role="button" 
+    id="scrollbutton" 
+    class="basebutton" 
+    aria-label="回到顶部">
+    <i class="iconfont icon-arrowleft button-icon"></i>
+  </a>
+
+<a 
+  role="button" 
+  id="menubutton"
+  aria-label="menu button"
+  class="basebutton">
+  <i class="iconfont icon-menu button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="popbutton" 
+  class="basebutton" 
+  aria-label="控制中心">
+  <i class="iconfont icon-expand button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="darkbutton" 
+  class="basebutton darkwidget" 
+  aria-label="夜色模式">
+  <i class="iconfont icon-weather button-icon"></i>
+</a>
+<a 
+  role="button" 
+  id="searchbutton" 
+  class="basebutton searchwidget" 
+  aria-label="搜索">
+  <i class="iconfont icon-search button-icon"></i>
+</a> 
+     
+     
+      
+
+  
+  
+    
+<link rel="stylesheet" href="https://npm.webcache.cn/katex@0.16.11/dist/katex.min.css">
+
+  
+ 
+     
+     
+      <script>
+  var addImgLayout = function () {
+    var img = document.querySelectorAll('.post-content img')
+    var i
+    for (i = 0; i < img.length; i++) {
+      var wrapper = document.createElement('a')
+      wrapper.setAttribute('href', img[i].getAttribute('data-src'))
+      wrapper.setAttribute('aria-label', 'illustration')
+      wrapper.style.cssText =
+        'width: 100%; display: flex; justify-content: center;'
+      if (img[i].alt) wrapper.dataset.caption = img[i].alt
+      wrapper.dataset.nolink = true
+      img[i].before(wrapper)
+      wrapper.append(img[i])
+      var divWrap = document.createElement('div')
+      divWrap.classList.add('gallery')
+      wrapper.before(divWrap)
+      divWrap.append(wrapper)
+    }
+    baguetteBox.run('.gallery')
+  }
+</script>
+<script>
+  loadScript(
+    "/js/lib/lightbox/baguetteBox.min.js",
+    addImgLayout
+  )
+</script>
+ 
+     
+     
+    <script src="/js/main.js"></script> 
+    
+      <script> 
+        loadScript('/js/lib/busuanzi.min.js') 
+      </script>
+     
+    
+      <script>
+        var addLazyload = function () {
+          var observer = lozad('.lozad', {
+            load: function (el) {
+              el.srcset = el.getAttribute('data-src')
+            },
+            loaded: function (el) {
+              el.classList.add('loaded')
+            },
+          })
+          observer.observe()
+        }
+      </script>
+      <script>
+        loadScript('/js/lib/lozad.min.js', addLazyload)
+      </script>
+    
+    <script src="//instant.page/5.1.0" type="module"
+      integrity="sha384-by67kQnR+pyfy8yWP4kPO12fHKRLHZPfEsiSXR8u2IKcTdxD805MGUXBzVPnkLHw"></script>
+    
+    
+    
+    <!-- Sidebar toggle script -->
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        const leftToggle = document.getElementById('left-sidebar-toggle');
+        const rightToggle = document.getElementById('right-sidebar-toggle');
+        const leftSidebar = document.getElementById('left-sidebar');
+        const rightSidebar = document.getElementById('right-sidebar');
+        
+        // Load saved states from localStorage
+        const leftSidebarState = localStorage.getItem('left-sidebar-state') || 'closed';
+        const rightSidebarState = localStorage.getItem('right-sidebar-state') || 'open';
+        
+        // Apply initial states
+        if (leftSidebarState === 'open') {
+          leftSidebar.classList.add('expanded');
+        }
+        
+        // 右边栏默认展开
+        if (rightSidebarState === 'open' || !rightSidebarState) {
+          rightSidebar.classList.add('expanded');
+        }
+        
+        // Toggle left sidebar
+        leftToggle.addEventListener('click', function() {
+          leftSidebar.classList.toggle('expanded');
+          if (leftSidebar.classList.contains('expanded')) {
+            localStorage.setItem('left-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+        });
+        
+        // Toggle right sidebar
+        rightToggle.addEventListener('click', function() {
+          rightSidebar.classList.toggle('expanded');
+          if (rightSidebar.classList.contains('expanded')) {
+            localStorage.setItem('right-sidebar-state', 'open');
+          } else {
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+        
+        // Close sidebars when clicking outside
+        document.addEventListener('click', function(event) {
+          // Close left sidebar when clicking outside of it
+          if (leftSidebar.classList.contains('expanded') && 
+              !leftSidebar.contains(event.target) && 
+              !leftToggle.contains(event.target)) {
+            leftSidebar.classList.remove('expanded');
+            localStorage.setItem('left-sidebar-state', 'closed');
+          }
+          
+          // Close right sidebar when clicking outside of it
+          if (rightSidebar.classList.contains('expanded') && 
+              !rightSidebar.contains(event.target) && 
+              !rightToggle.contains(event.target)) {
+            rightSidebar.classList.remove('expanded');
+            localStorage.setItem('right-sidebar-state', 'closed');
+          }
+        });
+      });
+    </script>
+  </body>
+</html>
